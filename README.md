@@ -1,50 +1,40 @@
-# Welcome to your Expo app 👋
+# HabitGram:
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+HabitGram is a habit-tracking and social accountability platform built with React Native, Expo, Expo Router, and Firebase. The app helps users build consistent habits by tracking goals, sharing progress posts, joining interest-based communities, and participating in challenges.
 
-## Get started
+## Motivation:
+Many people struggle to stay consistent with their habits because habit-building is often done alone. HabitGram aims to make self-improvement more engaging by combining habit tracking with social accountability and community support.
 
-1. Install dependencies
+## Features
+1. Habit & Goal Tracking: Users can create and track personal habits or goals.
+2. Share Progress Posts: Users can share updates about their progress, similar to posting on social media.
+3. Interest-Based Communities: Users can explore communities based on shared interests and goals.
+4. Challenges: Users can participate in challenges to stay motivated and consistent.
+5. Privacy Control: Users can manage whether their progress is shared publicly or kept private.
+6. Progress Analytics: Users can view their habit progress and track their consistency over time.
 
-   ```bash
-   npm install
-   ```
+## Tech Stacks
+1. React Native with Expo
+2. Firebase Authentication
+3. Cloud Firestore
+4. Node.js
 
-2. Start the app
+## Website Access
+The project currently runs locally using Expo.
 
-   ```bash
-   npx expo start
-   ```
+### Steps to Run the Website
+1. Clone the repository:
+git clone <your-github-repo-link>
+2. Open the project folder:
+cd HabitGram
+3. Install the dependencies:
+npm install
+4. Start the Expo development server:
+npx expo start
+5. Open the web version:
+Press w in the terminal, or open the localhost link shown by Expo.
 
-In the output, you'll find options to open the app in a
+Example:
+http://localhost:8081
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Note: The localhost link only works on the computer running the project. A public website link will be added after deployment.

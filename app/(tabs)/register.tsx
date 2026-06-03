@@ -12,7 +12,7 @@ export default function RegisterScreen() {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
       console.log('Registration successful!');
-      router.push('/(tabs)/home');
+      router.push('/(tabs)/setup-profile');
     } catch (error) {
       console.log('Register error:', error);
       Alert.alert('Error', 'Registration failed. Try again.');

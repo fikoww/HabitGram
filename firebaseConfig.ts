@@ -1,14 +1,16 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDu2zXFQzGFsMXWa9vfyejNHssjsuLdzMw",
-  authDomain: "next-phase-of-life.firebaseapp.com",
-  projectId: "next-phase-of-life",
-  storageBucket: "next-phase-of-life.firebasestorage.app",
-  messagingSenderId: "194958713490",
-  appId: "1:194958713490:web:cac6402e04130333eb7c4b",
+  apiKey: "AIzaSyAhOPtRxCtbuMDNfcZ4Dujf7BtXA1RzFMs",
+  authDomain: "habit-gram.firebaseapp.com",
+  projectId: "habit-gram",
+  storageBucket: "habit-gram.firebasestorage.app",
+  messagingSenderId: "912301275529",
+  appId: "1:912301275529:web:fb467f95a4034f4b874958",
 };
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = getFirestore(app);
