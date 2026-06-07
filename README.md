@@ -34,7 +34,5 @@ npx expo start
 5. Open the web version:
 Press w in the terminal, or open the localhost link shown by Expo.
 
-Example:
-http://localhost:8081
 
 Note: The localhost link only works on the computer running the project. A public website link will be added after deployment.
