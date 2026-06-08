@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { auth } from '@/firebaseConfig';
+import { auth } from '../firebaseConfig';
 import { useEffect, useState } from 'react';
 
 
