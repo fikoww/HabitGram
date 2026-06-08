@@ -1,30 +1,28 @@
 import { router } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth } from '../../firebaseConfig';
+import { auth } from '@/firebaseConfig';
 
-
-export default function LoginScreen() {
+export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleLogin = async () => {
+  const handleRegister = async () => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      console.log('Login successful!');
-      router.push('/(tabs)/home');
+      await createUserWithEmailAndPassword(auth, email, password);
+      console.log('Registration successful!');
+      router.replace('/setup-profile');
     } catch (error) {
-      console.log('Login error:', error);
-      Alert.alert('Error', 'Invalid email or password');
+      console.log('Register error:', error);
+      Alert.alert('Error', 'Registration failed. Try again.');
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>HabitGram</Text>
-      <Text style={styles.subtitle}>Sign in to continue</Text>
+      <Text style={styles.title}>Create Account</Text>
+      <Text style={styles.subtitle}>Join HabitGram!</Text>
 
       <TextInput
         style={styles.input}
@@ -41,13 +39,13 @@ export default function LoginScreen() {
         secureTextEntry
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      <TouchableOpacity style={styles.button} onPress={handleRegister}>
+        <Text style={styles.buttonText}>Register</Text>
       </TouchableOpacity>
 
-      <Text style={styles.register} onPress={() => router.push('/(tabs)/register')}>
-  Don't have an account? Register
-</Text>
+      <Text style={styles.login} onPress={() => router.replace('/')}>
+        Already have an account? Login
+      </Text>
     </View>
   );
 }
@@ -59,5 +57,5 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16 },
   button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 8, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  register: { textAlign: 'center', marginTop: 16, color: '#888' },
+  login: { textAlign: 'center', marginTop: 16, color: '#888' },
 });

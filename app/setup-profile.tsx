@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth, db } from '../../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 
 export default function SetupProfileScreen() {
   const [displayName, setDisplayName] = useState('');
@@ -47,7 +47,7 @@ export default function SetupProfileScreen() {
         onChangeText={setDisplayName}
       />
 
-        {errorMessage ? (
+      {errorMessage ? (
         <Text style={styles.errorText}>{errorMessage}</Text>
       ) : null}
 
@@ -65,4 +65,5 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16 },
   button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 8, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  errorText: { color: 'red', marginBottom: 12 },
 });
