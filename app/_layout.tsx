@@ -6,7 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { auth } from '../firebaseConfig';
 import { useEffect, useState } from 'react';
-
+import { ActivityIndicator } from 'react-native';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -25,7 +25,7 @@ export default function RootLayout() {
     return unsub;
   }, []);
 
-  if (checking) return null;
+  if (checking) return <ActivityIndicator style={{ flex: 1 }} />;
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
