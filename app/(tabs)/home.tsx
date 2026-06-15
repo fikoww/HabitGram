@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
@@ -9,6 +9,7 @@ type Habit = {
   id: string;
   name: string;
   completed: boolean;
+  completedDates?: string[];
 };
 
 type LibraryHabit = {
@@ -16,17 +17,24 @@ type LibraryHabit = {
   name: string;
   category: string;
 };
-const CATEGORIES = ["Sport", "Academic", "Productivity", "Wellness", "Creative", "Health"];
+
+const CATEGORIES = ['Sport', 'Academic', 'Productivity', 'Wellness', 'Creative', 'Health'];
+
+const getTodayString = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export default function HomeScreen() {
   const [displayName, setDisplayName] = useState('');
   const [habits, setHabits] = useState<Habit[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("Sport");
+  const [selectedCategory, setSelectedCategory] = useState('Sport');
   const [libraryHabits, setLibraryHabits] = useState<LibraryHabit[]>([]);
-  const [newHabitName, setNewHabitName] = useState("");
+  const [newHabitName, setNewHabitName] = useState('');
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const [selectedHabit, setSelectedHabit] = useState<Habit | null>(null);
 
-  // Load habits from Firestore in real-time
   useEffect(() => {
     let unsubscribeHabits: (() => void) | undefined;
 
@@ -38,10 +46,10 @@ export default function HomeScreen() {
       }
 
       const userDoc = await getDoc(doc(db, 'users', user.uid));
-
       if (userDoc.exists()) {
         setDisplayName(userDoc.data().displayName || '');
       }
+
       const q = query(collection(db, 'habits'), where('userId', '==', user.uid));
       unsubscribeHabits = onSnapshot(q, (snapshot) => {
         setHabits(snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Habit, 'id'>) })));
@@ -65,7 +73,6 @@ export default function HomeScreen() {
   const addHabitFromLibrary = async (name: string) => {
     const user = auth.currentUser;
     if (!user) return;
-
     const alreadyExists = habits.some((h) => h.name.toLowerCase() === name.toLowerCase());
     if (alreadyExists) {
       alert('Habit already in your list!');
@@ -74,6 +81,7 @@ export default function HomeScreen() {
     await addDoc(collection(db, 'habits'), {
       name,
       completed: false,
+      completedDates: [],
       userId: user.uid,
       createdAt: serverTimestamp(),
     });
@@ -88,27 +96,63 @@ export default function HomeScreen() {
       name: newHabitName.trim(),
       category: selectedCategory,
     });
-
     await addDoc(collection(db, 'habits'), {
       name: newHabitName.trim(),
       completed: false,
+      completedDates: [],
       userId: user.uid,
       createdAt: serverTimestamp(),
     });
-
     setNewHabitName('');
     setModalVisible(false);
   };
 
-  const toggleHabit = async (id: string, current: boolean) => {
-    await updateDoc(doc(db, 'habits', id), {
-      completed: !current,
+  const toggleToday = async (habit: Habit) => {
+    const today = getTodayString();
+    const dates = habit.completedDates || [];
+    const isDoneToday = dates.includes(today);
+    const newDates = isDoneToday ? dates.filter((d) => d !== today) : [...dates, today];
+    await updateDoc(doc(db, 'habits', habit.id), {
+      completedDates: newDates,
+      completed: !isDoneToday,
     });
+  };
+
+  const removeHabit = async (id: string) => {
+    await deleteDoc(doc(db, 'habits', id));
+  };
+
+  const openCalendar = (habit: Habit) => {
+    setSelectedHabit(habit);
+    setCalendarVisible(true);
   };
 
   const handleLogout = async () => {
     await signOut(auth);
     router.replace('/');
+  };
+
+  const renderCalendar = () => {
+    if (!selectedHabit) return null;
+    const dates = selectedHabit.completedDates || [];
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const str = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const done = dates.includes(str);
+      days.push({ str, done, label: `${d.getDate()}/${d.getMonth() + 1}` });
+    }
+    return (
+      <View style={styles.calendarGrid}>
+        {days.map((day) => (
+          <View key={day.str} style={[styles.calendarDay, day.done ? styles.calendarDone : styles.calendarMiss]}>
+            <Text style={styles.calendarDayText}>{day.label}</Text>
+            <Text style={styles.calendarDayIcon}>{day.done ? '✅' : '❌'}</Text>
+          </View>
+        ))}
+      </View>
+    );
   };
 
   return (
@@ -129,23 +173,32 @@ export default function HomeScreen() {
       <FlatList
         data={habits}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.habitItem, item.completed && styles.habitCompleted]}
-            onPress={() => toggleHabit(item.id, item.completed)}
-          >
-            <Text style={styles.habitText}>{item.completed ? '✅' : '🔥'} {item.name}</Text>
-            <Text style={styles.habitHint}>{item.completed ? 'Done! Tap to undo' : 'Tap to complete'}</Text>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const today = getTodayString();
+          const doneToday = (item.completedDates || []).includes(today);
+          return (
+            <View style={[styles.habitItem, doneToday && styles.habitCompleted]}>
+              <TouchableOpacity style={styles.habitMain} onPress={() => openCalendar(item)}>
+                <Text style={styles.habitText}>{doneToday ? '✅' : '🔥'} {item.name}</Text>
+                <Text style={styles.habitHint}>Tap to see calendar</Text>
+              </TouchableOpacity>
+              <View style={styles.habitActions}>
+                <TouchableOpacity style={[styles.doneButton, doneToday && styles.doneButtonActive]} onPress={() => toggleToday(item)}>
+                  <Text style={styles.doneButtonText}>{doneToday ? 'Undo' : 'Done Today'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.removeButton} onPress={() => removeHabit(item.id)}>
+                  <Text style={styles.removeButtonText}>🗑️</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        }}
       />
 
-      {/* Modal */}
+      {/* Add Habit Modal */}
       <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalContainer}>
           <Text style={styles.modalTitle}>Add Habit</Text>
-
-          {/* Category selector */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
             {CATEGORIES.map((cat) => (
               <TouchableOpacity
@@ -153,17 +206,16 @@ export default function HomeScreen() {
                 style={[styles.categoryChip, selectedCategory === cat && styles.categoryChipActive]}
                 onPress={() => setSelectedCategory(cat)}
               >
-                <Text style={[styles.categoryChipText, selectedCategory === cat && styles.categoryChipTextActive]}>
-                  {cat}
-                </Text>
+                <Text style={[styles.categoryChipText, selectedCategory === cat && styles.categoryChipTextActive]}>{cat}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
-          {/* Library habits */}
           <Text style={styles.sectionTitle}>Choose from list:</Text>
           <ScrollView style={styles.libraryList}>
-            {libraryHabits.filter((item) => !habits.some((h) => h.name.toLowerCase() === item.name.toLowerCase())).map((item) => (
+            {libraryHabits.filter((item) =>
+              !habits.some((h) => h.name.toLowerCase() === item.name.toLowerCase())
+            ).map((item) => (
               <TouchableOpacity key={item.id} style={styles.libraryItem} onPress={() => addHabitFromLibrary(item.name)}>
                 <Text style={styles.libraryItemText}>{item.name}</Text>
                 <Text style={styles.addText}>+ Add</Text>
@@ -171,7 +223,6 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
 
-          {/* Add new habit */}
           <Text style={styles.sectionTitle}>Or add new to "{selectedCategory}":</Text>
           <TextInput
             style={styles.input}
@@ -182,9 +233,20 @@ export default function HomeScreen() {
           <TouchableOpacity style={styles.button} onPress={addNewHabit}>
             <Text style={styles.buttonText}>Add New Habit</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
             <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* Calendar Modal */}
+      <Modal visible={calendarVisible} animationType="slide" onRequestClose={() => setCalendarVisible(false)}>
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>{selectedHabit?.name}</Text>
+          <Text style={styles.sectionTitle}>Last 30 days:</Text>
+          <ScrollView>{renderCalendar()}</ScrollView>
+          <TouchableOpacity style={styles.cancelButton} onPress={() => setCalendarVisible(false)}>
+            <Text style={styles.cancelText}>Close</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -193,10 +255,25 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#fff', },
+  container: { flex: 1, padding: 24, backgroundColor: '#fff' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 40, marginBottom: 8 },
-  welcome: { fontSize: 18, color: '#666', flex: 1, },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 24, },
+  welcome: { fontSize: 18, color: '#666', flex: 1 },
+  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 24 },
+  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 8, alignItems: 'center', marginBottom: 16 },
+  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  habitItem: { borderWidth: 1, borderColor: '#eee', borderRadius: 8, marginBottom: 8, overflow: 'hidden' },
+  habitCompleted: { backgroundColor: '#f0fff0', borderColor: '#4CAF50' },
+  habitMain: { padding: 16 },
+  habitText: { fontSize: 16 },
+  habitHint: { fontSize: 12, color: '#999', marginTop: 4 },
+  habitActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#eee' },
+  doneButton: { flex: 1, padding: 10, alignItems: 'center', backgroundColor: '#f9f9f9' },
+  doneButtonActive: { backgroundColor: '#e0f7e0' },
+  doneButtonText: { color: '#4CAF50', fontWeight: 'bold', fontSize: 14 },
+  removeButton: { padding: 10, paddingHorizontal: 16, alignItems: 'center', backgroundColor: '#fff5f5' },
+  removeButtonText: { fontSize: 18 },
+  logoutButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: '#ddd' },
+  logoutText: { color: '#666', fontWeight: 'bold' },
   modalContainer: { flex: 1, padding: 24, backgroundColor: '#fff', paddingTop: 60 },
   modalTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
   categoryScroll: { marginBottom: 16 },
@@ -211,13 +288,11 @@ const styles = StyleSheet.create({
   addText: { color: '#4CAF50', fontWeight: 'bold' },
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16 },
   cancelButton: { padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-  cancelText: { color: '#888', fontSize: 16 }, button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 8, alignItems: 'center', marginBottom: 24, },
-  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16, },
-  habitItem: { padding: 16, borderWidth: 1, borderColor: '#eee', borderRadius: 8, marginBottom: 8, },
-  habitCompleted: { backgroundColor: '#f0fff0', borderColor: '#4CAF50', },
-  habitText: { fontSize: 16, },
-  habitHint: { fontSize: 12, color: '#999', marginTop: 4, },
-  logoutButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', },
-  logoutText: { color: '#666', fontWeight: 'bold', },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 40, marginBottom: 8, },
+  cancelText: { color: '#888', fontSize: 16 },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', paddingVertical: 16 },
+  calendarDay: { width: 60, padding: 8, borderRadius: 8, alignItems: 'center' },
+  calendarDone: { backgroundColor: '#e0f7e0' },
+  calendarMiss: { backgroundColor: '#fff0f0' },
+  calendarDayText: { fontSize: 12, color: '#666' },
+  calendarDayIcon: { fontSize: 16, marginTop: 4 },
 });
