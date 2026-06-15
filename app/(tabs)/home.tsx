@@ -163,7 +163,7 @@ export default function HomeScreen() {
           {/* Library habits */}
           <Text style={styles.sectionTitle}>Choose from list:</Text>
           <ScrollView style={styles.libraryList}>
-            {libraryHabits.map((item) => (
+            {libraryHabits.filter((item) => !habits.some((h) => h.name.toLowerCase() === item.name.toLowerCase())).map((item) => (
               <TouchableOpacity key={item.id} style={styles.libraryItem} onPress={() => addHabitFromLibrary(item.name)}>
                 <Text style={styles.libraryItemText}>{item.name}</Text>
                 <Text style={styles.addText}>+ Add</Text>
