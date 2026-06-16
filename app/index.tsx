@@ -1,22 +1,38 @@
 import { router } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth } from '../firebaseConfig';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = async () => {
+    setError('');
+    if (!email || !password) {
+      setError('Please fill in all fields!');
+      return;
+    }
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      console.log('Login successful!');
       router.replace('/(tabs)/home');
-    } catch (error) {
-      console.log('Login error:', error);
-      Alert.alert('Error', 'Invalid email or password');
+    } catch (err: any) {
+      if (
+        err.code === 'auth/user-not-found' ||
+        err.code === 'auth/wrong-password' ||
+        err.code === 'auth/invalid-credential'
+      ) {
+        setError('Incorrect email or password.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Please enter a valid email address.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many attempts. Try again later.');
+      } else {
+        setError('Login failed. Please try again.');
+      }
     }
   };
 
@@ -25,45 +41,60 @@ export default function LoginScreen() {
       <Text style={styles.title}>HabitGram</Text>
       <Text style={styles.subtitle}>Sign in to continue</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-      />
+      <View style={styles.card}>
+        <TextInput
+          style={[styles.input, error ? styles.inputError : null]}
+          placeholder="Email"
+          value={email}
+          onChangeText={(t) => { setEmail(t); setError(''); }}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        <View style={[styles.passwordContainer, error ? styles.inputError : null]}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Password"
+            value={password}
+            onChangeText={(t) => { setPassword(t); setError(''); }}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+            <Text style={styles.eyeIcon}>{showPassword ? '✕' : '👁️'}</Text>
+          </TouchableOpacity>
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <TouchableOpacity onPress={() => router.push('/forgot-password')}>
+          <Text style={styles.forgotText}>Forgot password?</Text>
+        </TouchableOpacity>
 
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login</Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity onPress={() => router.push('/forgot-password')}>
-        <Text style={{ textAlign: 'center', color: '#22c55e', marginTop: 12 }}>
-          Forgot Password?
-        </Text>
       </TouchableOpacity>
 
       <Text style={styles.register} onPress={() => router.push('/register')}>
         Don't have an account? Register
       </Text>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
-  title: { fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
-  subtitle: { fontSize: 16, textAlign: 'center', color: '#888', marginBottom: 32 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16 },
-  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 8, alignItems: 'center' },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5', padding: 24 },
+  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 4 },
+  subtitle: { fontSize: 16, color: '#888', marginBottom: 32 },
+  card: { width: '100%', maxWidth: 400, backgroundColor: '#fff', borderRadius: 16, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+  input: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 14, marginBottom: 12, fontSize: 15, backgroundColor: '#fafafa' },
+  inputError: { borderColor: '#ff4444' },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#eee', borderRadius: 10, backgroundColor: '#fafafa', marginBottom: 4 },
+  passwordInput: { flex: 1, padding: 14, fontSize: 15 },
+  eyeButton: { padding: 14 },
+  eyeIcon: { fontSize: 18 },
+  errorText: { color: '#ff4444', fontSize: 13, marginBottom: 8, marginTop: 4 },
+  forgotText: { color: '#4CAF50', fontSize: 13, marginBottom: 16, textAlign: 'right' },
+  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 4, marginBottom: 16 },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  register: { textAlign: 'center', marginTop: 16, color: '#888' },
+  register: { textAlign: 'center', color: '#888', fontSize: 14 },
+  registerLink: { color: '#4CAF50', fontWeight: 'bold' },
 });
