@@ -1,9 +1,5 @@
 import { router } from 'expo-router';
-<<<<<<< HEAD
-import { doc, getDocs, addDoc, collection, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-=======
 import { addDoc, collection, doc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
->>>>>>> 549f9515b77f1457c352abb9047c715b9a297165
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../firebaseConfig';
@@ -12,19 +8,11 @@ const CATEGORIES = ['Sport', 'Academic', 'Productivity', 'Wellness', 'Creative',
 
 export default function SetupProfileScreen() {
   const [step, setStep] = useState(1);
-
-  // Step 1
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [username, setUsername] = useState('');
-  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [selectedHabits, setSelectedHabits] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState('Sport');
-  const [habitList, setHabitList] = useState<{ id: string; name: string }[]>([]);
-
-  // Step 2
   const [selectedCategory, setSelectedCategory] = useState('Sport');
   const [habitList, setHabitList] = useState<{ id: string; name: string }[]>([]);
   const [selectedHabit, setSelectedHabit] = useState('');

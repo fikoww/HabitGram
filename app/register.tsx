@@ -97,24 +97,15 @@ export default function RegisterScreen() {
         </View>
         {confirmError ? <Text style={styles.errorText}>{confirmError}</Text> : null}
 
-<<<<<<< HEAD
-
-      <Text style={styles.login} onPress={() => router.replace('/')}>
-        Already have an account? Login
-      </Text>
-
-=======
         <TouchableOpacity style={styles.button} onPress={handleRegister}>
           <Text style={styles.buttonText}>Register</Text>
         </TouchableOpacity>
+
         <Text style={styles.login} onPress={() => router.replace('/')}>
           Already have an account? <Text style={styles.loginLink}>Login</Text>
         </Text>
       </View>
->>>>>>> 549f9515b77f1457c352abb9047c715b9a297165
     </View>
-
-    
   );
 }
 

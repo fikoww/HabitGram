@@ -69,13 +69,14 @@ export default function LoginScreen() {
           <Text style={styles.forgotText}>Forgot password?</Text>
         </TouchableOpacity>
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleLogin}>
+          <Text style={styles.buttonText}>Login</Text>
+        </TouchableOpacity>
 
-      <Text style={styles.register} onPress={() => router.push('/register')}>
-        Don't have an account? Register
-      </Text>
+        <Text style={styles.register} onPress={() => router.push('/register')}>
+          Don't have an account? <Text style={styles.registerLink}>Register</Text>
+        </Text>
+      </View>
     </View>
   );
 }
