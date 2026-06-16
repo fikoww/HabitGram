@@ -1,12 +1,20 @@
 import { router } from 'expo-router';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDocs, addDoc, collection, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../firebaseConfig';
 
+const CATEGORIES = ['Sport', 'Academic', 'Productivity', 'Wellness', 'Creative', 'Health'];
+
 export default function SetupProfileScreen() {
   const [displayName, setDisplayName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [username, setUsername] = useState('');
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [selectedHabits, setSelectedHabits] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState('Sport');
+  const [habitList, setHabitList] = useState<{ id: string; name: string }[]>([]);
 
   const handleSave = async () => {
     setErrorMessage('');

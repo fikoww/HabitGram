@@ -43,10 +43,14 @@ export default function RegisterScreen() {
         <Text style={styles.buttonText}>Register</Text>
       </TouchableOpacity>
 
+
       <Text style={styles.login} onPress={() => router.replace('/')}>
         Already have an account? Login
       </Text>
+
     </View>
+
+    
   );
 }
 

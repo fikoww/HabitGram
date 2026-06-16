@@ -43,10 +43,17 @@ export default function LoginScreen() {
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
+      
+      <TouchableOpacity onPress={() => router.push('/forgot-password')}>
+        <Text style={{ textAlign: 'center', color: '#22c55e', marginTop: 12 }}>
+          Forgot Password?
+        </Text>
+      </TouchableOpacity>
 
       <Text style={styles.register} onPress={() => router.push('/register')}>
         Don't have an account? Register
       </Text>
+
     </View>
   );
 }
