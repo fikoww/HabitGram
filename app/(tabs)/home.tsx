@@ -1,458 +1,339 @@
 import { router } from 'expo-router';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import {
+  addDoc,
+  arrayRemove,
+  arrayUnion,
+  collection, doc, getDoc, getDocs,
+  orderBy, query, serverTimestamp,
+  updateDoc, where
+} from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, FlatList, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  FlatList,
+  Image,
+  KeyboardAvoidingView, Modal, Platform,
+  RefreshControl,
+  StyleSheet, Text, TextInput, TouchableOpacity, View
+} from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
-type Habit = {
+type Post = {
   id: string;
-  name: string;
-  completed: boolean;
-  completedDates?: string[];
-  commitment?: number;
-  journals?: Record<string, string>;
+  userId: string;
+  displayName: string;
+  username: string;
+  habitName: string;
+  caption: string;
+  imageUrl?: string;
+  likes: string[];
+  commentCount: number;
+  createdAt: any;
 };
 
-type LibraryHabit = {
+type Comment = {
   id: string;
-  name: string;
-  category: string;
-};
-
-const CATEGORIES = ['Sport', 'Academic', 'Productivity', 'Wellness', 'Creative', 'Health'];
-
-const getTodayString = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  userId: string;
+  displayName: string;
+  username: string;
+  text: string;
+  createdAt: any;
 };
 
 export default function HomeScreen() {
-  const [displayName, setDisplayName] = useState('');
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('Sport');
-  const [libraryHabits, setLibraryHabits] = useState<LibraryHabit[]>([]);
-  const [newHabitName, setNewHabitName] = useState('');
-  const [commitment, setCommitment] = useState(1);
-  const [pendingHabit, setPendingHabit] = useState<string | null>(null);
-  const [commitmentModalVisible, setCommitmentModalVisible] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState('');
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [followingIds, setFollowingIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Journal states
-  const [journalModal, setJournalModal] = useState(false);
-  const [journalText, setJournalText] = useState('');
-  const [activeHabit, setActiveHabit] = useState<Habit | null>(null);
-  const [optionsModal, setOptionsModal] = useState(false);
-
-  // Delete state
-  const [deleteHabitId, setDeleteHabitId] = useState<string | null>(null);
+  // Comment modal
+  const [commentModal, setCommentModal] = useState(false);
+  const [activePost, setActivePost] = useState<Post | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [commentDisplayName, setCommentDisplayName] = useState('');
+  const [commentUsername, setCommentUsername] = useState('');
 
   useEffect(() => {
-    let unsubscribeHabits: (() => void) | undefined;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setDisplayName('');
-        setHabits([]);
-        return;
-      }
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+      setCurrentUserId(user.uid);
 
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
-        setDisplayName(userDoc.data().displayName || '');
+        setCommentDisplayName(userDoc.data().displayName || '');
+        setCommentUsername(userDoc.data().username || '');
       }
 
-      const q = query(collection(db, 'habits'), where('userId', '==', user.uid));
-      unsubscribeHabits = onSnapshot(q, (snapshot) => {
-        setHabits(snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Habit, 'id'>) })));
-      });
+      await loadFollowingAndPosts(user.uid);
     });
-
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeHabits) unsubscribeHabits();
-    };
+    return () => unsub();
   }, []);
 
-  useEffect(() => {
-    const fetchLibrary = async () => {
-      const snapshot = await getDocs(query(collection(db, 'habitlist'), where('category', '==', selectedCategory)));
-      setLibraryHabits(snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<LibraryHabit, 'id'>) })));
+  const loadFollowingAndPosts = async (uid: string) => {
+    setLoading(true);
+    try {
+      // Get following list
+      const followSnap = await getDocs(collection(db, 'users', uid, 'following'));
+      const ids = followSnap.docs.map((d) => d.id);
+      setFollowingIds(ids);
+
+      if (ids.length === 0) {
+        setPosts([]);
+        setLoading(false);
+        return;
+      }
+
+      // Firestore 'in' query max 30 items
+      const chunks = [];
+      for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10));
+
+      const allPosts: Post[] = [];
+      for (const chunk of chunks) {
+        const q = query(
+          collection(db, 'posts'),
+          where('userId', 'in', chunk),
+          orderBy('createdAt', 'desc')
+        );
+        const snap = await getDocs(q);
+        snap.docs.forEach((d) => allPosts.push({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
+      }
+
+      allPosts.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setPosts(allPosts);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleLike = async (post: Post) => {
+    if (!currentUserId) return;
+    const ref = doc(db, 'posts', post.id);
+    const liked = post.likes.includes(currentUserId);
+    await updateDoc(ref, {
+      likes: liked ? arrayRemove(currentUserId) : arrayUnion(currentUserId),
+    });
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === post.id
+          ? { ...p, likes: liked ? p.likes.filter((id) => id !== currentUserId) : [...p.likes, currentUserId] }
+          : p
+      )
+    );
+  };
+
+  const openComments = async (post: Post) => {
+    setActivePost(post);
+    setCommentModal(true);
+    const q = query(collection(db, 'posts', post.id, 'comments'), orderBy('createdAt', 'asc'));
+    const snap = await getDocs(q);
+    setComments(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Comment, 'id'>) })));
+  };
+
+  const submitComment = async () => {
+    if (!activePost || !commentText.trim()) return;
+    const ref = collection(db, 'posts', activePost.id, 'comments');
+    const newComment = {
+      userId: currentUserId,
+      displayName: commentDisplayName,
+      username: commentUsername,
+      text: commentText.trim(),
+      createdAt: serverTimestamp(),
     };
-    fetchLibrary();
-  }, [selectedCategory]);
-
-  const confirmAddHabit = async () => {
-    const user = auth.currentUser;
-    if (!user || !pendingHabit) return;
-
-    const alreadyExists = habits.some((h) => h.name.toLowerCase() === pendingHabit.toLowerCase());
-    if (alreadyExists) {
-      alert('Habit already in your list!');
-      setCommitmentModalVisible(false);
-      setPendingHabit(null);
-      return;
-    }
-
-    await addDoc(collection(db, 'habits'), {
-      name: pendingHabit,
-      completed: false,
-      completedDates: [],
-      commitment: commitment,
-      journals: {},
-      userId: user.uid,
-      createdAt: serverTimestamp(),
-    });
-
-    setPendingHabit(null);
-    setCommitment(1);
-    setCommitmentModalVisible(false);
-    setModalVisible(false);
+    const docRef = await addDoc(ref, newComment);
+    await updateDoc(doc(db, 'posts', activePost.id), { commentCount: (activePost.commentCount || 0) + 1 });
+    setComments((prev) => [...prev, { id: docRef.id, ...newComment, createdAt: new Date() }]);
+    setPosts((prev) => prev.map((p) => p.id === activePost.id ? { ...p, commentCount: p.commentCount + 1 } : p));
+    setCommentText('');
   };
 
-  const addNewHabit = async () => {
-    if (!newHabitName.trim()) return;
-    const user = auth.currentUser;
-    if (!user) return;
-
-    await addDoc(collection(db, 'habitlist'), {
-      name: newHabitName.trim(),
-      category: selectedCategory,
-    });
-
-    await addDoc(collection(db, 'habits'), {
-      name: newHabitName.trim(),
-      completed: false,
-      completedDates: [],
-      commitment: commitment,
-      journals: {},
-      userId: user.uid,
-      createdAt: serverTimestamp(),
-    });
-
-    setNewHabitName('');
-    setCommitment(1);
-    setModalVisible(false);
+  const formatTime = (ts: any) => {
+    if (!ts?.seconds) return '';
+    const diff = Math.floor((Date.now() - ts.seconds * 1000) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
   };
 
-  const handleDonePress = (habit: Habit) => {
-    const today = getTodayString();
-    const doneToday = (habit.completedDates || []).includes(today);
-    setActiveHabit(habit);
-    if (doneToday) {
-      setOptionsModal(true);
-    } else {
-      setJournalText('');
-      setJournalModal(true);
-    }
-  };
+  const renderPost = ({ item }: { item: Post }) => {
+    const liked = item.likes.includes(currentUserId);
+    return (
+      <View style={styles.postCard}>
+        {/* Post header */}
+        <TouchableOpacity style={styles.postHeader} onPress={() => router.push(`/user-profile?id=${item.userId}`)}>
+          <View style={styles.postAvatar}>
+            <Text style={styles.postAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
+          </View>
+          <View>
+            <Text style={styles.postDisplayName}>{item.displayName}</Text>
+            <Text style={styles.postUsername}>@{item.username} · {formatTime(item.createdAt)}</Text>
+          </View>
+        </TouchableOpacity>
 
-  const saveJournal = async () => {
-    if (!activeHabit || !journalText.trim()) {
-      alert('Please write something in your journal!');
-      return;
-    }
-    const today = getTodayString();
-    const dates = activeHabit.completedDates || [];
-    const newDates = dates.includes(today) ? dates : [...dates, today];
-    const journals = activeHabit.journals || {};
-    await updateDoc(doc(db, 'habits', activeHabit.id), {
-      completedDates: newDates,
-      completed: true,
-      journals: { ...journals, [today]: journalText.trim() },
-    });
-    setJournalModal(false);
-    setActiveHabit(null);
-    setJournalText('');
-  };
+        {/* Habit tag */}
+        <View style={styles.habitTag}>
+          <Text style={styles.habitTagText}>🔥 {item.habitName}</Text>
+        </View>
 
-  const openEditJournal = () => {
-    const today = getTodayString();
-    setOptionsModal(false);
-    setJournalText(activeHabit?.journals?.[today] || '');
-    setJournalModal(true);
-  };
+        {/* Image */}
+        {item.imageUrl ? (
+          <Image source={{ uri: item.imageUrl }} style={styles.postImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.postImagePlaceholder}>
+            <Text style={styles.postImagePlaceholderText}>📷</Text>
+          </View>
+        )}
 
-  const markAsUndone = async () => {
-    if (!activeHabit) return;
-    const today = getTodayString();
-    const newDates = (activeHabit.completedDates || []).filter((d) => d !== today);
-    const journals = { ...(activeHabit.journals || {}) };
-    delete journals[today];
-    await updateDoc(doc(db, 'habits', activeHabit.id), {
-      completedDates: newDates,
-      completed: false,
-      journals,
-    });
-    setOptionsModal(false);
-    setActiveHabit(null);
-  };
+        {/* Caption */}
+        {item.caption ? <Text style={styles.postCaption}>{item.caption}</Text> : null}
 
-  const removeHabit = (id: string) => {
-    setDeleteHabitId(id);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteHabitId) return;
-    await deleteDoc(doc(db, 'habits', deleteHabitId));
-    setDeleteHabitId(null);
-  };
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    router.replace('/');
+        {/* Actions */}
+        <View style={styles.postActions}>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item)}>
+            <Text style={styles.actionIcon}>{liked ? '❤️' : '🤍'}</Text>
+            <Text style={styles.actionCount}>{item.likes.length}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => openComments(item)}>
+            <Text style={styles.actionIcon}>💬</Text>
+            <Text style={styles.actionCount}>{item.commentCount || 0}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   };
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.welcome}>Welcome{displayName ? `, ${displayName}` : ''}!</Text>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
+        <Text style={styles.headerTitle}>HabitGram</Text>
+        <TouchableOpacity style={styles.createBtn} onPress={() => router.push('/create-post')}>
+          <Text style={styles.createBtnText}>+ Post</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.title}>My Habits 🌱</Text>
-
-      <TouchableOpacity style={styles.button} onPress={() => setModalVisible(true)}>
-        <Text style={styles.buttonText}>+ Add Habit</Text>
-      </TouchableOpacity>
-
-      <FlatList
-        data={habits}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const today = getTodayString();
-          const doneToday = (item.completedDates || []).includes(today);
-          return (
-            <TouchableOpacity
-              style={[styles.habitItem, doneToday && styles.habitCompleted]}
-              onPress={() => router.push(`/habit-detail?id=${item.id}`)}
-            >
-              <View style={styles.habitMain}>
-                <Text style={styles.habitText}>{doneToday ? '✅' : '🔥'} {item.name}</Text>
-                <Text style={styles.habitCommitment}>🎯 {item.commitment || 1}x per week</Text>
-                {doneToday && item.journals?.[today] && (
-                  <Text style={styles.journalPreview}>📝 {item.journals[today].slice(0, 40)}{item.journals[today].length > 40 ? '...' : ''}</Text>
-                )}
-              </View>
-              <View style={styles.habitActions}>
-                <TouchableOpacity
-                  style={[styles.doneButton, doneToday && styles.doneButtonActive]}
-                  onPress={(e) => { e.stopPropagation(); handleDonePress(item); }}
-                >
-                  <Text style={styles.doneButtonText}>{doneToday ? '✅ Done' : 'Done Today'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={(e) => { e.stopPropagation(); removeHabit(item.id); }}
-                >
-                  <Text style={styles.removeButtonText}>🗑️</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-      />
-
-      {/* Add Habit Modal */}
-      <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>Add Habit</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-            {CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat}
-                style={[styles.categoryChip, selectedCategory === cat && styles.categoryChipActive]}
-                onPress={() => setSelectedCategory(cat)}
-              >
-                <Text style={[styles.categoryChipText, selectedCategory === cat && styles.categoryChipTextActive]}>{cat}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <Text style={styles.sectionTitle}>Choose from list:</Text>
-          <ScrollView style={styles.libraryList}>
-            {libraryHabits.filter((item) =>
-              !habits.some((h) => h.name.toLowerCase() === item.name.toLowerCase())
-            ).map((item) => (
-              <TouchableOpacity key={item.id} style={styles.libraryItem} onPress={() => {
-                setPendingHabit(item.name);
-                setCommitmentModalVisible(true);
-              }}>
-                <Text style={styles.libraryItemText}>{item.name}</Text>
-                <Text style={styles.addText}>+ Add</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <Text style={styles.sectionTitle}>Or add new to "{selectedCategory}":</Text>
-          <Text style={styles.sectionTitle}>Commitment per week:</Text>
-          <View style={styles.commitmentRow}>
-            {[1, 2, 3, 4, 5, 6, 7].map((num) => (
-              <TouchableOpacity
-                key={num}
-                style={[styles.commitmentChip, commitment === num && styles.commitmentChipActive]}
-                onPress={() => setCommitment(num)}
-              >
-                <Text style={[styles.commitmentChipText, commitment === num && styles.commitmentChipTextActive]}>{num}x</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TextInput
-            style={styles.input}
-            placeholder="New habit name..."
-            value={newHabitName}
-            onChangeText={setNewHabitName}
-          />
-          <TouchableOpacity style={styles.button} onPress={addNewHabit}>
-            <Text style={styles.buttonText}>Add New Habit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
-            <Text style={styles.cancelText}>Cancel</Text>
+      {loading ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Loading feed...</Text>
+        </View>
+      ) : posts.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyEmoji}>🌱</Text>
+          <Text style={styles.emptyTitle}>Your feed is empty</Text>
+          <Text style={styles.emptySubtitle}>Follow people to see their habit posts here!</Text>
+          <TouchableOpacity style={styles.exploreBtn} onPress={() => router.push('/(tabs)/explore')}>
+            <Text style={styles.exploreBtnText}>Explore People</Text>
           </TouchableOpacity>
         </View>
-      </Modal>
+      ) : (
+        <FlatList
+          data={posts}
+          keyExtractor={(item) => item.id}
+          renderItem={renderPost}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => {
+              setRefreshing(true);
+              loadFollowingAndPosts(currentUserId);
+            }} />
+          }
+        />
+      )}
 
-      {/* Commitment Modal */}
-      <Modal visible={commitmentModalVisible} animationType="fade" transparent onRequestClose={() => setCommitmentModalVisible(false)}>
-        <View style={styles.overlayCenter}>
-          <View style={styles.overlayBox}>
-            <Text style={styles.overlayTitle}>How often per week?</Text>
-            <Text style={styles.overlaySubtitle}>{pendingHabit}</Text>
-            <View style={styles.commitmentRow}>
-              {[1, 2, 3, 4, 5, 6, 7].map((num) => (
-                <TouchableOpacity
-                  key={num}
-                  style={[styles.commitmentChip, commitment === num && styles.commitmentChipActive]}
-                  onPress={() => setCommitment(num)}
-                >
-                  <Text style={[styles.commitmentChipText, commitment === num && styles.commitmentChipTextActive]}>{num}x</Text>
-                </TouchableOpacity>
-              ))}
+      {/* Comment Modal */}
+      <Modal visible={commentModal} animationType="slide" onRequestClose={() => setCommentModal(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.commentContainer}>
+            <View style={styles.commentHeader}>
+              <Text style={styles.commentTitle}>Comments</Text>
+              <TouchableOpacity onPress={() => setCommentModal(false)}>
+                <Text style={styles.commentClose}>✕</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.button} onPress={confirmAddHabit}>
-              <Text style={styles.buttonText}>Add Habit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => {
-              setCommitmentModalVisible(false);
-              setPendingHabit(null);
-              setCommitment(1);
-            }}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
-      {/* Journal Modal */}
-      <Modal visible={journalModal} animationType="slide" transparent onRequestClose={() => setJournalModal(false)}>
-        <View style={styles.overlayBottom}>
-          <View style={styles.overlayBottomBox}>
-            <Text style={styles.overlayTitle}>How did it go? 📝</Text>
-            <Text style={styles.overlaySubtitle}>{activeHabit?.name} — Today</Text>
-            <TextInput
-              style={styles.journalInput}
-              placeholder="Write about your session... (required)"
-              value={journalText}
-              onChangeText={setJournalText}
-              multiline
-              numberOfLines={4}
+            <FlatList
+              data={comments}
+              keyExtractor={(item) => item.id}
+              style={{ flex: 1 }}
+              renderItem={({ item }) => (
+                <View style={styles.commentItem}>
+                  <View style={styles.commentAvatar}>
+                    <Text style={styles.commentAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
+                  </View>
+                  <View style={styles.commentContent}>
+                    <Text style={styles.commentName}>{item.displayName} <Text style={styles.commentUser}>@{item.username}</Text></Text>
+                    <Text style={styles.commentText}>{item.text}</Text>
+                  </View>
+                </View>
+              )}
+              ListEmptyComponent={<Text style={styles.noComments}>No comments yet. Be the first!</Text>}
             />
-            <TouchableOpacity style={styles.button} onPress={saveJournal}>
-              <Text style={styles.buttonText}>Mark as Done ✅</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setJournalModal(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
-      {/* Options Modal */}
-      <Modal visible={optionsModal} animationType="fade" transparent onRequestClose={() => setOptionsModal(false)}>
-        <View style={styles.overlayCenter}>
-          <View style={styles.overlayBox}>
-            <Text style={styles.overlayTitle}>Already done today! 🎉</Text>
-            <Text style={styles.overlaySubtitle}>{activeHabit?.name}</Text>
-            <TouchableOpacity style={styles.button} onPress={openEditJournal}>
-              <Text style={styles.buttonText}>✏️ Edit Journal</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.button, { backgroundColor: '#ff4444' }]} onPress={markAsUndone}>
-              <Text style={styles.buttonText}>↩️ Mark as Not Done</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setOptionsModal(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
+            <View style={styles.commentInputRow}>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Add a comment..."
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+              />
+              <TouchableOpacity style={styles.commentSendBtn} onPress={submitComment}>
+                <Text style={styles.commentSendText}>Send</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Modal>
-
-      {/* Delete Confirm Modal */}
-      <Modal visible={!!deleteHabitId} animationType="fade" transparent onRequestClose={() => setDeleteHabitId(null)}>
-        <View style={styles.overlayCenter}>
-          <View style={styles.overlayBox}>
-            <Text style={styles.overlayTitle}>Delete Habit?</Text>
-            <Text style={styles.overlaySubtitle}>This can't be undone.</Text>
-            <TouchableOpacity style={[styles.button, { backgroundColor: '#ff4444' }]} onPress={confirmDelete}>
-              <Text style={styles.buttonText}>Delete</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setDeleteHabitId(null)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#fff' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 40, marginBottom: 8 },
-  welcome: { fontSize: 18, color: '#666', flex: 1 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 24 },
-  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 8, alignItems: 'center', marginBottom: 16 },
-  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  habitItem: { borderWidth: 1, borderColor: '#eee', borderRadius: 8, marginBottom: 8, overflow: 'hidden' },
-  habitCompleted: { backgroundColor: '#f0fff0', borderColor: '#4CAF50' },
-  habitMain: { padding: 16 },
-  habitText: { fontSize: 16 },
-  habitCommitment: { fontSize: 12, color: '#4CAF50', marginTop: 4 },
-  journalPreview: { fontSize: 12, color: '#888', marginTop: 4, fontStyle: 'italic' },
-  habitActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#eee' },
-  doneButton: { flex: 1, padding: 10, alignItems: 'center', backgroundColor: '#f9f9f9' },
-  doneButtonActive: { backgroundColor: '#e0f7e0' },
-  doneButtonText: { color: '#4CAF50', fontWeight: 'bold', fontSize: 14 },
-  removeButton: { padding: 10, paddingHorizontal: 16, alignItems: 'center', backgroundColor: '#fff5f5' },
-  removeButtonText: { fontSize: 18 },
-  logoutButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: '#ddd' },
-  logoutText: { color: '#666', fontWeight: 'bold' },
-  modalContainer: { flex: 1, padding: 24, backgroundColor: '#fff', paddingTop: 60 },
-  modalTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
-  categoryScroll: { marginBottom: 16 },
-  categoryChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', marginRight: 8 },
-  categoryChipActive: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
-  categoryChipText: { color: '#666' },
-  categoryChipTextActive: { color: '#fff', fontWeight: 'bold' },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 8, marginTop: 8 },
-  libraryList: { maxHeight: 200, marginBottom: 16 },
-  libraryItem: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderWidth: 1, borderColor: '#eee', borderRadius: 8, marginBottom: 8 },
-  libraryItemText: { fontSize: 16 },
-  addText: { color: '#4CAF50', fontWeight: 'bold' },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16 },
-  cancelButton: { padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 4 },
-  cancelText: { color: '#888', fontSize: 16 },
-  commitmentRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
-  commitmentChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd' },
-  commitmentChipActive: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
-  commitmentChipText: { color: '#666' },
-  commitmentChipTextActive: { color: '#fff', fontWeight: 'bold' },
-  overlayCenter: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  overlayBox: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 },
-  overlayBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  overlayBottomBox: { backgroundColor: '#fff', borderRadius: 20, padding: 24, paddingBottom: 40 },
-  overlayTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 4, textAlign: 'center' },
-  overlaySubtitle: { fontSize: 14, color: '#888', marginBottom: 16, textAlign: 'center' },
-  journalInput: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#fafafa', marginBottom: 16, minHeight: 100, textAlignVertical: 'top' },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
+  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#4CAF50' },
+  createBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  createBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+  emptyEmoji: { fontSize: 48, marginBottom: 16 },
+  emptyTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 8 },
+  emptySubtitle: { fontSize: 15, color: '#888', textAlign: 'center', marginBottom: 24 },
+  emptyText: { fontSize: 16, color: '#888' },
+  exploreBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 },
+  exploreBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  postCard: { backgroundColor: '#fff', marginBottom: 8, paddingBottom: 8 },
+  postHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10 },
+  postAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
+  postAvatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  postDisplayName: { fontSize: 15, fontWeight: '600' },
+  postUsername: { fontSize: 12, color: '#888' },
+  habitTag: { marginHorizontal: 12, marginBottom: 8, alignSelf: 'flex-start', backgroundColor: '#f0fff0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#4CAF50' },
+  habitTagText: { fontSize: 12, color: '#4CAF50', fontWeight: '600' },
+  postImage: { width: '100%', height: 300 },
+  postImagePlaceholder: { width: '100%', height: 200, backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' },
+  postImagePlaceholderText: { fontSize: 48 },
+  postCaption: { fontSize: 14, color: '#333', padding: 12, paddingBottom: 8 },
+  postActions: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 4, gap: 16 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actionIcon: { fontSize: 20 },
+  actionCount: { fontSize: 14, color: '#666' },
+  commentContainer: { flex: 1, backgroundColor: '#fff' },
+  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee', paddingTop: 56 },
+  commentTitle: { fontSize: 18, fontWeight: 'bold' },
+  commentClose: { fontSize: 18, color: '#888' },
+  commentItem: { flexDirection: 'row', padding: 12, gap: 10, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
+  commentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
+  commentAvatarText: { color: '#fff', fontWeight: 'bold' },
+  commentContent: { flex: 1 },
+  commentName: { fontSize: 14, fontWeight: '600' },
+  commentUser: { fontWeight: 'normal', color: '#888' },
+  commentText: { fontSize: 14, color: '#333', marginTop: 2 },
+  noComments: { textAlign: 'center', color: '#aaa', padding: 32 },
+  commentInputRow: { flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: '#eee', gap: 8 },
+  commentInput: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, fontSize: 14, maxHeight: 80 },
+  commentSendBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, justifyContent: 'center' },
+  commentSendText: { color: '#fff', fontWeight: 'bold' },
 });
