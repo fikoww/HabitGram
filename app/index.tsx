@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth } from '../firebaseConfig';
 
 export default function LoginScreen() {
@@ -16,10 +16,11 @@ export default function LoginScreen() {
       setError('Please fill in all fields!');
       return;
     }
-    try {
+    try { 
       await signInWithEmailAndPassword(auth, email, password);
       router.replace('/(tabs)/home');
-    } catch (err: any) {
+    } 
+    catch (err: any) {
       if (
         err.code === 'auth/user-not-found' ||
         err.code === 'auth/wrong-password' ||
@@ -82,19 +83,26 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5', padding: 24 },
-  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 4 },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', 
+               backgroundColor: '#d7d7d7', padding: 24 },
+  title: { fontSize: 52, fontWeight: 'bold', marginBottom: 9 },
   subtitle: { fontSize: 16, color: '#888', marginBottom: 32 },
-  card: { width: '100%', maxWidth: 400, backgroundColor: '#fff', borderRadius: 16, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
-  input: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 14, marginBottom: 12, fontSize: 15, backgroundColor: '#fafafa' },
-  inputError: { borderColor: '#ff4444' },
-  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#eee', borderRadius: 10, backgroundColor: '#fafafa', marginBottom: 4 },
-  passwordInput: { flex: 1, padding: 14, fontSize: 15 },
+  card: { width: '100%', maxWidth: 400, backgroundColor: '#fff',
+          borderRadius: 16, padding: 24, shadowColor: '#000000', 
+          shadowOffset: { width: 4, height: 4 }, shadowOpacity: 0.08, 
+          shadowRadius: 12, elevation: 4},
+  input: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, 
+           padding: 14, marginBottom: 12, fontSize: 15, backgroundColor: '#fafafa', ...(Platform.OS === 'web' && { outlineStyle: 'none' as any })},
+  inputError: { borderColor: '#ff4444', borderWidth: 1.5},
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, padding: 5,
+                       borderColor: '#eee', borderRadius: 10, backgroundColor: '#fafafa', marginBottom: 4 },
+  passwordInput: { flex: 1, padding: 14, fontSize: 15 , borderColor: 'white', borderWidth: 0 ,  ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }) },
   eyeButton: { padding: 14 },
   eyeIcon: { fontSize: 18 },
   errorText: { color: '#ff4444', fontSize: 13, marginBottom: 8, marginTop: 4 },
   forgotText: { color: '#4CAF50', fontSize: 13, marginBottom: 16, textAlign: 'right' },
-  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 4, marginBottom: 16 },
+  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, alignItems: 'center', 
+            marginTop: 4, marginBottom: 16 },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   register: { textAlign: 'center', color: '#888', fontSize: 14 },
   registerLink: { color: '#4CAF50', fontWeight: 'bold' },

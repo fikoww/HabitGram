@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth } from '../firebaseConfig';
 
 export default function RegisterScreen() {
@@ -10,7 +10,6 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
@@ -27,8 +26,8 @@ export default function RegisterScreen() {
       valid = false;
     }
 
-    if (password.length < 6) {
-      setPasswordError('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setPasswordError('Password must be at least 8 characters.');
       valid = false;
     }
 
@@ -45,9 +44,11 @@ export default function RegisterScreen() {
     } catch (error: any) {
       if (error.code === 'auth/email-already-in-use') {
         setEmailError('This email is already registered.');
-      } else if (error.code === 'auth/invalid-email') {
+      } 
+      else if (error.code === 'auth/invalid-email') {
         setEmailError('Please enter a valid email address.');
-      } else {
+      } 
+      else {
         setEmailError('Registration failed. Please try again.');
       }
     }
@@ -110,18 +111,25 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f5f5f5', padding: 24 },
-  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 4 },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', 
+               backgroundColor: '#d7d7d7', padding: 24 },
+  title: { fontSize: 52, fontWeight: 'bold', marginBottom: 4 },
   subtitle: { fontSize: 16, color: '#888', marginBottom: 32 },
-  card: { width: '100%', maxWidth: 400, backgroundColor: '#fff', borderRadius: 16, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
-  input: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 14, marginBottom: 4, fontSize: 15, backgroundColor: '#fafafa' },
+  card: { width: '100%', maxWidth: 400, backgroundColor: '#fff', 
+          borderRadius: 16, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, 
+          shadowOpacity: 0.08, shadowRadius: 12, elevation: 4 },
+  input: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 14, 
+           marginBottom: 4, fontSize: 15, backgroundColor: '#fafafa', ...(Platform.OS === 'web' && { outlineStyle: 'none' as any })},
   inputError: { borderColor: '#ff4444' },
-  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#eee', borderRadius: 10, backgroundColor: '#fafafa', marginBottom: 4 },
-  passwordInput: { flex: 1, padding: 14, fontSize: 15 },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', 
+                       borderWidth: 1, borderColor: '#eee', borderRadius: 10, 
+                       backgroundColor: '#fafafa', marginBottom: 4, padding: 5},
+  passwordInput: { flex: 1, padding: 14, fontSize: 15, ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }) },
   eyeButton: { padding: 14 },
   eyeIcon: { fontSize: 18 },
   errorText: { color: '#ff4444', fontSize: 13, marginBottom: 8 },
-  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 12, marginBottom: 16 },
+  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, 
+            alignItems: 'center', marginTop: 12, marginBottom: 16 },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   login: { textAlign: 'center', color: '#888', fontSize: 14 },
   loginLink: { color: '#4CAF50', fontWeight: 'bold' },
