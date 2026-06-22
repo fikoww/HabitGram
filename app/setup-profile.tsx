@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { addDoc, collection, doc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../firebaseConfig';
 
 const CATEGORIES = ['Sport', 'Academic', 'Productivity', 'Wellness', 'Creative', 'Health'];
@@ -85,13 +85,14 @@ export default function SetupProfileScreen() {
 
       {step === 1 && (
         <View style={styles.card}>
-          <Text style={styles.title}>Set Up Profile 🌱</Text>
+          <Text style={styles.title}>Set Up Profile</Text>
           <Text style={styles.subtitle}>What should we call you?</Text>
 
           <Text style={styles.label}>Display Name</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Jasper"
+            placeholder= "e.g. Andi Lee"
+            placeholderTextColor="#bbb"
             value={displayName}
             onChangeText={(t) => { setDisplayName(t); setErrorMessage(''); }}
           />
@@ -101,7 +102,8 @@ export default function SetupProfileScreen() {
             <Text style={styles.atSign}>@</Text>
             <TextInput
               style={styles.usernameInput}
-              placeholder="e.g. jasper123"
+              placeholder="e.g. andilee123"
+              placeholderTextColor="#bbb"
               value={username}
               onChangeText={(t) => { setUsername(t.toLowerCase()); setErrorMessage(''); }}
               autoCapitalize="none"
@@ -111,7 +113,7 @@ export default function SetupProfileScreen() {
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
           <TouchableOpacity style={styles.button} onPress={handleNextStep1} disabled={loading}>
-            <Text style={styles.buttonText}>{loading ? 'Checking...' : 'Next →'}</Text>
+            <Text style={styles.buttonText}>{loading ? 'Checking...' : 'Next'}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -119,11 +121,11 @@ export default function SetupProfileScreen() {
       {step === 2 && (
         <View style={styles.card}>
           <TouchableOpacity onPress={() => setStep(1)} style={styles.backButton}>
-            <Text style={styles.backText}>← Back</Text>
+            <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
 
-          <Text style={styles.title}>Pick a Starter Habit 💪</Text>
-          <Text style={styles.subtitle}>Choose one habit to kick things off!</Text>
+          <Text style={styles.title}>Pick Habits!</Text>
+          <Text style={styles.subtitle}>Choose one habit to start!</Text>
 
           <Text style={styles.label}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
@@ -166,7 +168,7 @@ export default function SetupProfileScreen() {
             onPress={() => handleFinish(false)}
             disabled={!selectedHabit}
           >
-            <Text style={styles.buttonText}>Let's Go! 🌱</Text>
+            <Text style={styles.buttonText}>Let's Go!</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.skipButton} onPress={() => handleFinish(true)}>
@@ -188,10 +190,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 4 },
   subtitle: { fontSize: 14, color: '#888', marginBottom: 20 },
   label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6, marginTop: 8 },
-  input: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 14, fontSize: 15, backgroundColor: '#fafafa', marginBottom: 4 },
-  usernameContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#eee', borderRadius: 10, backgroundColor: '#fafafa', marginBottom: 4 },
+  input: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 14, fontSize: 15, backgroundColor: '#fafafa', marginBottom: 4, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
+  usernameContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#eee', borderRadius: 10, backgroundColor: '#fafafa', marginBottom: 4},
   atSign: { paddingLeft: 14, fontSize: 15, color: '#888' },
-  usernameInput: { flex: 1, padding: 14, fontSize: 15 },
+  usernameInput: { flex: 1, padding: 14, fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
   errorText: { color: '#ff4444', fontSize: 13, marginBottom: 8, marginTop: 4 },
   button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 16 },
   buttonDisabled: { backgroundColor: '#aaa' },

@@ -36,7 +36,7 @@ export default function RegisterScreen() {
       valid = false;
     }
 
-    if (!valid) return;
+    if (!valid) return; // don't proceed with registration if validation fails
 
     try {
       await createUserWithEmailAndPassword(auth, email, password);
