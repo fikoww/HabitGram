@@ -163,7 +163,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.postCard}>
         {/* Post header */}
-        <TouchableOpacity style={styles.postHeader} onPress={() => router.push(`/user-profile?id=${item.userId}`)}>
+        <TouchableOpacity style={styles.postHeader}>
           <View style={styles.postAvatar}>
             <Text style={styles.postAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
           </View>

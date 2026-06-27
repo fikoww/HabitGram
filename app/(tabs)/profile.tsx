@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
-import { collection, deleteDoc, doc, getDoc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
 type Habit = {
@@ -13,6 +13,8 @@ type Habit = {
     commitment?: number;
     pinned?: boolean;
 };
+
+type HabitListItem = { id: string; name: string; category: string };
 
 const getWeekDates = () => {
     const today = new Date();
@@ -29,6 +31,8 @@ const getWeekDates = () => {
 };
 
 const getWeekStreak = (completedDates: string[], commitment: number) => {
+    // "No commitment" habits (commitment 0) don't use weekly streaks
+    if (!commitment || commitment <= 0) return { current: 0, max: 0 };
     if (!completedDates || completedDates.length === 0) return { current: 0, max: 0 };
 
     const weekMap: Record<string, number> = {};
@@ -87,6 +91,15 @@ export default function ProfileScreen() {
     const [changeCommitmentHabit, setChangeCommitmentHabit] = useState<Habit | null>(null);
     const [newCommitment, setNewCommitment] = useState(1);
 
+    // Add Habit modal state
+    const [addHabitVisible, setAddHabitVisible] = useState(false);
+    const [allHabitList, setAllHabitList] = useState<HabitListItem[]>([]);
+    const [loadingHabitList, setLoadingHabitList] = useState(false);
+    const [selectedAddCategory, setSelectedAddCategory] = useState('');
+    const [selectedAddHabitName, setSelectedAddHabitName] = useState('');
+    const [newHabitCommitment, setNewHabitCommitment] = useState(1);
+    const [addError, setAddError] = useState('');
+
     const weekDates = getWeekDates();
 
     useEffect(() => {
@@ -94,7 +107,6 @@ export default function ProfileScreen() {
         let unsubscribeUser: (() => void) | undefined;
         const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             if (!user) return;
-            // Listen to user profile in real-time (so edits show immediately)
             unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
                 if (userDoc.exists()) {
                     const data = userDoc.data();
@@ -136,6 +148,55 @@ export default function ProfileScreen() {
         }
     };
 
+    const openAddHabit = async () => {
+        setAddHabitVisible(true);
+        if (allHabitList.length === 0) {
+            setLoadingHabitList(true);
+            try {
+                const snap = await getDocs(collection(db, 'habitlist'));
+                setAllHabitList(snap.docs.map((d) => ({
+                    id: d.id,
+                    name: d.data().name,
+                    category: d.data().category,
+                })));
+            } catch (e) {
+                setAddError('Failed to load habits.');
+            } finally {
+                setLoadingHabitList(false);
+            }
+        }
+    };
+
+    const closeAddHabit = () => {
+        setAddHabitVisible(false);
+        setSelectedAddCategory('');
+        setSelectedAddHabitName('');
+        setNewHabitCommitment(1);
+        setAddError('');
+    };
+
+    const handleAddHabit = async () => {
+        const user = auth.currentUser;
+        if (!user) return;
+        if (!selectedAddHabitName) {
+            setAddError('Please pick a habit.');
+            return;
+        }
+        try {
+            await addDoc(collection(db, 'habits'), {
+                userId: user.uid,
+                name: selectedAddHabitName,
+                commitment: newHabitCommitment,
+                completed: false,
+                completedDates: [],
+                pinned: false,
+            });
+            closeAddHabit();
+        } catch (e) {
+            setAddError('Failed to add habit. Please try again.');
+        }
+    };
+
     const handleDeleteHabit = async (id: string) => {
         setHabitMenuId(null);
         Alert.alert('Delete Habit', 'Are you sure?', [
@@ -157,12 +218,18 @@ export default function ProfileScreen() {
 
     const mostConsistent = habits.reduce((best, h) => {
         if (!best) return h;
-        const { max } = getWeekStreak(h.completedDates || [], h.commitment || 1);
-        const bestMax = getWeekStreak(best.completedDates || [], best.commitment || 1).max;
+        const { max } = getWeekStreak(h.completedDates || [], h.commitment ?? 1);
+        const bestMax = getWeekStreak(best.completedDates || [], best.commitment ?? 1).max;
         return max > bestMax ? h : best;
     }, habits[0]);
 
-    const longestStreak = mostConsistent ? getWeekStreak(mostConsistent.completedDates || [], mostConsistent.commitment || 1).max : 0;
+    const longestStreak = mostConsistent ? getWeekStreak(mostConsistent.completedDates || [], mostConsistent.commitment ?? 1).max : 0;
+
+    const categories = Array.from(new Set(allHabitList.map((h) => h.category)));
+    const userHabitNames = habits.map((h) => h.name.toLowerCase());
+    const availableHabits = allHabitList.filter(
+        (h) => h.category === selectedAddCategory && !userHabitNames.includes(h.name.toLowerCase())
+    );
 
     return (
         <View style={{ flex: 1 }}>
@@ -182,7 +249,6 @@ export default function ProfileScreen() {
                     <Text style={styles.username}>@{username}</Text>
                     {bio ? <Text style={styles.bio}>{bio}</Text> : null}
 
-                    {/* Edit Profile button */}
                     <TouchableOpacity style={styles.editButton} onPress={() => router.push('/edit-profile')}>
                         <Text style={styles.editButtonText}>Edit Profile</Text>
                     </TouchableOpacity>
@@ -210,13 +276,26 @@ export default function ProfileScreen() {
                     </View>
                 </View>
 
+                {/* Section header with Add Habit button */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>My Habits</Text>
+                    <TouchableOpacity style={styles.addHabitButton} onPress={openAddHabit}>
+                        <Text style={styles.addHabitButtonText}>+ Add Habit</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {habits.length === 0 && (
+                    <Text style={styles.emptyText}>No habits yet. Tap "+ Add Habit" to start!</Text>
+                )}
+
                 {/* Habit list */}
-                <Text style={styles.sectionTitle}>My Habits</Text>
                 {habits.map((habit) => {
-                    const commitment = habit.commitment || 1;
+                    const commitment = habit.commitment ?? 1;
+                    const isNoCommitment = commitment === 0;
                     const { current, max } = getWeekStreak(habit.completedDates || [], commitment);
+                    const totalDone = (habit.completedDates || []).length;
                     const doneThisWeek = weekDates.filter((date) => (habit.completedDates || []).includes(date)).length;
-                    const commitmentMet = doneThisWeek >= commitment;
+                    const commitmentMet = commitment > 0 && doneThisWeek >= commitment;
 
                     return (
                         <TouchableOpacity
@@ -234,7 +313,6 @@ export default function ProfileScreen() {
                                 </TouchableOpacity>
                             </View>
 
-                            {/* Habit popout menu */}
                             {habitMenuId === habit.id && (
                                 <View style={styles.habitPopout}>
                                     <TouchableOpacity style={styles.habitMenuItem} onPress={() => handlePinHabit(habit)}>
@@ -243,7 +321,7 @@ export default function ProfileScreen() {
                                     <View style={styles.menuDivider} />
                                     <TouchableOpacity style={styles.habitMenuItem} onPress={() => {
                                         setHabitMenuId(null);
-                                        setNewCommitment(habit.commitment || 1);
+                                        setNewCommitment(habit.commitment ?? 1);
                                         setChangeCommitmentHabit(habit);
                                     }}>
                                         <Text style={styles.habitMenuText}>✏️ Change Commitment</Text>
@@ -255,7 +333,6 @@ export default function ProfileScreen() {
                                 </View>
                             )}
 
-                            {/* Week circles */}
                             <View style={styles.weekRow}>
                                 {weekDates.map((date, i) => {
                                     const done = (habit.completedDates || []).includes(date);
@@ -267,12 +344,19 @@ export default function ProfileScreen() {
                                 })}
                             </View>
 
-                            {/* Stats */}
-                            <View style={styles.habitStatsRow}>
-                                <Text style={styles.habitStat}>🎯 {commitment}x/week</Text>
-                                <Text style={styles.habitStat}>🔥 {current} week(s) streak</Text>
-                                <Text style={styles.habitStat}>🏆 Best: {max} week(s)</Text>
-                            </View>
+                            {/* Stats differ for "no commitment" habits */}
+                            {isNoCommitment ? (
+                                <View style={styles.habitStatsRow}>
+                                    <Text style={styles.habitStat}>✨ Just do it (no goal)</Text>
+                                    <Text style={styles.habitStat}>🔥 {totalDone}x done total</Text>
+                                </View>
+                            ) : (
+                                <View style={styles.habitStatsRow}>
+                                    <Text style={styles.habitStat}>🎯 {commitment}x/week</Text>
+                                    <Text style={styles.habitStat}>🔥 {current} week(s) streak</Text>
+                                    <Text style={styles.habitStat}>🏆 Best: {max} week(s)</Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
                     );
                 })}
@@ -295,6 +379,95 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
             )}
 
+            {/* Add Habit Modal */}
+            <Modal visible={addHabitVisible} animationType="fade" transparent onRequestClose={closeAddHabit}>
+                <View style={styles.commitmentOverlay}>
+                    <View style={styles.addHabitBox}>
+                        <Text style={styles.commitmentTitle}>Add a Habit</Text>
+
+                        {loadingHabitList ? (
+                            <Text style={styles.modalHint}>Loading habits...</Text>
+                        ) : (
+                            <>
+                                <Text style={styles.modalLabel}>Category</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                                    {categories.map((cat) => (
+                                        <TouchableOpacity
+                                            key={cat}
+                                            style={[styles.commitmentChip, { marginRight: 8 }, selectedAddCategory === cat && styles.commitmentChipActive]}
+                                            onPress={() => { setSelectedAddCategory(cat); setSelectedAddHabitName(''); setAddError(''); }}
+                                        >
+                                            <Text style={[styles.commitmentChipText, selectedAddCategory === cat && styles.commitmentChipTextActive]}>{cat}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+
+                                <Text style={styles.modalLabel}>Habit</Text>
+                                <ScrollView style={styles.habitPickList} nestedScrollEnabled>
+                                    {!selectedAddCategory ? (
+                                        <Text style={styles.modalHint}>Pick a category first.</Text>
+                                    ) : availableHabits.length === 0 ? (
+                                        <Text style={styles.modalHint}>No new habits in this category.</Text>
+                                    ) : (
+                                        availableHabits.map((h) => (
+                                            <TouchableOpacity
+                                                key={h.id}
+                                                style={[styles.habitPickItem, selectedAddHabitName === h.name && styles.habitPickItemActive]}
+                                                onPress={() => { setSelectedAddHabitName(h.name); setAddError(''); }}
+                                            >
+                                                <Text style={[styles.habitPickText, selectedAddHabitName === h.name && styles.habitPickTextActive]}>
+                                                    {selectedAddHabitName === h.name ? '✅ ' : '○ '}{h.name}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))
+                                    )}
+                                </ScrollView>
+
+                                {selectedAddHabitName ? (
+                                    <>
+                                        <Text style={styles.modalLabel}>How often?</Text>
+                                        <View style={styles.commitmentRow}>
+                                            <TouchableOpacity
+                                                style={[styles.commitmentChipWide, newHabitCommitment === 0 && styles.commitmentChipActive]}
+                                                onPress={() => setNewHabitCommitment(0)}
+                                            >
+                                                <Text style={[styles.commitmentChipText, newHabitCommitment === 0 && styles.commitmentChipTextActive]}>No commitment</Text>
+                                            </TouchableOpacity>
+                                            {[1, 2, 3, 4, 5, 6, 7].map((num) => (
+                                                <TouchableOpacity
+                                                    key={num}
+                                                    style={[styles.commitmentChip, newHabitCommitment === num && styles.commitmentChipActive]}
+                                                    onPress={() => setNewHabitCommitment(num)}
+                                                >
+                                                    <Text style={[styles.commitmentChipText, newHabitCommitment === num && styles.commitmentChipTextActive]}>{num}x</Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                        {newHabitCommitment === 0 && (
+                                            <Text style={styles.modalSubHint}>Just do it whenever — we'll count your total.</Text>
+                                        )}
+                                    </>
+                                ) : null}
+
+                                {addError ? <Text style={styles.modalErrorText}>{addError}</Text> : null}
+
+                                <TouchableOpacity
+                                    style={[styles.saveButton, !selectedAddHabitName && styles.saveButtonDisabled]}
+                                    onPress={handleAddHabit}
+                                    disabled={!selectedAddHabitName}
+                                >
+                                    <Text style={styles.saveButtonText}>Add Habit</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+
+                        <TouchableOpacity style={styles.cancelButton} onPress={closeAddHabit}>
+                            <Text style={styles.cancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
             {/* Change Commitment Modal */}
             <Modal visible={!!changeCommitmentHabit} animationType="fade" transparent onRequestClose={() => setChangeCommitmentHabit(null)}>
                 <View style={styles.commitmentOverlay}>
@@ -302,6 +475,12 @@ export default function ProfileScreen() {
                         <Text style={styles.commitmentTitle}>Change Commitment</Text>
                         <Text style={styles.commitmentSubtitle}>{changeCommitmentHabit?.name}</Text>
                         <View style={styles.commitmentRow}>
+                            <TouchableOpacity
+                                style={[styles.commitmentChipWide, newCommitment === 0 && styles.commitmentChipActive]}
+                                onPress={() => setNewCommitment(0)}
+                            >
+                                <Text style={[styles.commitmentChipText, newCommitment === 0 && styles.commitmentChipTextActive]}>No commitment</Text>
+                            </TouchableOpacity>
                             {[1, 2, 3, 4, 5, 6, 7].map((num) => (
                                 <TouchableOpacity
                                     key={num}
@@ -312,6 +491,9 @@ export default function ProfileScreen() {
                                 </TouchableOpacity>
                             ))}
                         </View>
+                        {newCommitment === 0 && (
+                            <Text style={styles.modalSubHint}>Just do it whenever — we'll count your total.</Text>
+                        )}
                         <TouchableOpacity style={styles.saveButton} onPress={handleChangeCommitment}>
                             <Text style={styles.saveButtonText}>Save</Text>
                         </TouchableOpacity>
@@ -341,7 +523,11 @@ const styles = StyleSheet.create({
     statBox: { alignItems: 'center', flex: 1, paddingHorizontal: 4 },
     statNumber: { fontSize: 18, fontWeight: 'bold', color: '#4CAF50', textAlign: 'center' },
     statLabel: { fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center' },
-    sectionTitle: { fontSize: 18, fontWeight: 'bold', marginTop: 24, marginBottom: 12, paddingHorizontal: 16 },
+    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 12, paddingHorizontal: 16 },
+    sectionTitle: { fontSize: 18, fontWeight: 'bold' },
+    addHabitButton: { backgroundColor: '#4CAF50', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8 },
+    addHabitButtonText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+    emptyText: { textAlign: 'center', color: '#aaa', fontSize: 14, marginTop: 20, paddingHorizontal: 16 },
     habitCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginHorizontal: 16, marginBottom: 10, position: 'relative', minHeight: 100 },
     habitPinned: { borderWidth: 1.5, borderColor: '#4CAF50' },
     habitCardDone: { backgroundColor: '#f0fff0', borderWidth: 1.5, borderColor: '#4CAF50' },
@@ -358,7 +544,7 @@ const styles = StyleSheet.create({
     dayCircleDone: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
     dayLabel: { fontSize: 11, color: '#aaa', fontWeight: '600' },
     dayLabelDone: { color: '#fff' },
-    habitStatsRow: { flexDirection: 'row', gap: 12 },
+    habitStatsRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
     habitStat: { fontSize: 12, color: '#666' },
     overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     dropdownMenu: { position: 'absolute', top: 100, right: 16, backgroundColor: '#fff', borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, minWidth: 180 },
@@ -367,14 +553,26 @@ const styles = StyleSheet.create({
     menuDivider: { height: 1, backgroundColor: '#f0f0f0' },
     commitmentOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
     commitmentBox: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 },
-    commitmentTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 4, textAlign: 'center' },
+    addHabitBox: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '85%' },
+    commitmentTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' },
     commitmentSubtitle: { fontSize: 15, color: '#888', marginBottom: 16, textAlign: 'center' },
+    modalLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8 },
+    modalHint: { fontSize: 13, color: '#aaa', paddingVertical: 12, textAlign: 'center' },
+    modalSubHint: { fontSize: 12, color: '#4CAF50', textAlign: 'center', marginBottom: 12, marginTop: -8 },
+    habitPickList: { maxHeight: 180, marginBottom: 12 },
+    habitPickItem: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: '#eee', marginBottom: 8, backgroundColor: '#fafafa' },
+    habitPickItemActive: { borderColor: '#4CAF50', backgroundColor: '#f0fff0' },
+    habitPickText: { fontSize: 14, color: '#444' },
+    habitPickTextActive: { color: '#4CAF50', fontWeight: '600' },
     commitmentRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap', justifyContent: 'center' },
     commitmentChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd' },
+    commitmentChipWide: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd' },
     commitmentChipActive: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
     commitmentChipText: { color: '#666' },
     commitmentChipTextActive: { color: '#fff', fontWeight: 'bold' },
+    modalErrorText: { color: '#ff4444', fontSize: 13, marginBottom: 8, textAlign: 'center' },
     saveButton: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, alignItems: 'center', marginBottom: 8 },
+    saveButtonDisabled: { backgroundColor: '#a5d6a7' },
     saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
     cancelButton: { padding: 14, borderRadius: 8, alignItems: 'center' },
     cancelText: { color: '#888', fontSize: 16 },
