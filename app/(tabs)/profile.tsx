@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
 type Habit = {
@@ -79,6 +79,8 @@ const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 export default function ProfileScreen() {
     const [displayName, setDisplayName] = useState('');
     const [username, setUsername] = useState('');
+    const [bio, setBio] = useState('');
+    const [photoUrl, setPhotoUrl] = useState('');
     const [habits, setHabits] = useState<Habit[]>([]);
     const [menuVisible, setMenuVisible] = useState(false);
     const [habitMenuId, setHabitMenuId] = useState<string | null>(null);
@@ -89,13 +91,19 @@ export default function ProfileScreen() {
 
     useEffect(() => {
         let unsubscribeHabits: (() => void) | undefined;
+        let unsubscribeUser: (() => void) | undefined;
         const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             if (!user) return;
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-                setDisplayName(userDoc.data().displayName || '');
-                setUsername(userDoc.data().username || '');
-            }
+            // Listen to user profile in real-time (so edits show immediately)
+            unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    setDisplayName(data.displayName || '');
+                    setUsername(data.username || '');
+                    setBio(data.bio || '');
+                    setPhotoUrl(data.photoUrl || '');
+                }
+            });
             const q = query(collection(db, 'habits'), where('userId', '==', user.uid));
             unsubscribeHabits = onSnapshot(q, (snapshot) => {
                 const loaded = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Habit, 'id'>) }));
@@ -103,7 +111,11 @@ export default function ProfileScreen() {
                 setHabits(loaded);
             });
         });
-        return () => { unsubscribeAuth(); if (unsubscribeHabits) unsubscribeHabits(); };
+        return () => {
+            unsubscribeAuth();
+            if (unsubscribeHabits) unsubscribeHabits();
+            if (unsubscribeUser) unsubscribeUser();
+        };
     }, []);
 
     const handleLogout = async () => {
@@ -157,13 +169,24 @@ export default function ProfileScreen() {
             <ScrollView style={styles.container}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>
-                            {displayName ? displayName[0].toUpperCase() : '?'}
-                        </Text>
-                    </View>
+                    {photoUrl ? (
+                        <Image source={{ uri: photoUrl }} style={styles.avatar} />
+                    ) : (
+                        <View style={styles.avatar}>
+                            <Text style={styles.avatarText}>
+                                {displayName ? displayName[0].toUpperCase() : '?'}
+                            </Text>
+                        </View>
+                    )}
                     <Text style={styles.name}>{displayName}</Text>
                     <Text style={styles.username}>@{username}</Text>
+                    {bio ? <Text style={styles.bio}>{bio}</Text> : null}
+
+                    {/* Edit Profile button */}
+                    <TouchableOpacity style={styles.editButton} onPress={() => router.push('/edit-profile')}>
+                        <Text style={styles.editButtonText}>Edit Profile</Text>
+                    </TouchableOpacity>
+
                     <TouchableOpacity style={styles.menuButton} onPress={() => setMenuVisible(!menuVisible)}>
                         <Text style={styles.menuDots}>⋮</Text>
                     </TouchableOpacity>
@@ -309,6 +332,9 @@ const styles = StyleSheet.create({
     avatarText: { fontSize: 32, color: '#fff', fontWeight: 'bold' },
     name: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
     username: { fontSize: 15, color: '#888' },
+    bio: { fontSize: 14, color: '#555', textAlign: 'center', marginTop: 8, paddingHorizontal: 32, lineHeight: 20 },
+    editButton: { marginTop: 16, borderWidth: 1, borderColor: '#4CAF50', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 32 },
+    editButtonText: { color: '#4CAF50', fontWeight: '600', fontSize: 14 },
     menuButton: { position: 'absolute', top: 60, right: 20, padding: 8 },
     menuDots: { fontSize: 24, color: '#333', fontWeight: 'bold' },
     statsRow: { flexDirection: 'row', backgroundColor: '#fff', marginTop: 12, padding: 16, justifyContent: 'space-around' },
