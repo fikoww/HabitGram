@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { addDoc, arrayUnion, collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, arrayUnion, collection, doc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
 import {
@@ -12,11 +12,13 @@ import { auth, db, storage } from '../firebaseConfig';
 
 type Habit = { id: string; name: string };
 
-// Today's date as YYYY-MM-DD (same format used in habit-detail & profile)
 const getTodayString = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DAY_NAMES = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export default function CreatePostScreen() {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -26,6 +28,13 @@ export default function CreatePostScreen() {
   const [uploading, setUploading] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
+
+  // Date picker
+  const today = getTodayString();
+  const todayDate = new Date();
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [viewMonth, setViewMonth] = useState(todayDate.getMonth());
+  const [viewYear, setViewYear] = useState(todayDate.getFullYear());
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -74,18 +83,54 @@ export default function CreatePostScreen() {
     if (!result.canceled) setImageUri(result.assets[0].uri);
   };
 
-  // Upload with a 15s timeout so it never hangs forever (e.g. CORS on web)
   const uploadImageToStorage = async (uri: string, userId: string): Promise<string> => {
     const response = await fetch(uri);
     const blob = await response.blob();
     const filename = `posts/${userId}/${Date.now()}.jpg`;
     const storageRef = ref(storage, filename);
-
     const uploadPromise = uploadBytes(storageRef, blob).then(() => getDownloadURL(storageRef));
     const timeoutPromise = new Promise<string>((_, reject) =>
       setTimeout(() => reject(new Error('Upload timed out')), 15000)
     );
     return await Promise.race([uploadPromise, timeoutPromise]);
+  };
+
+  // ---- Mini calendar navigation ----
+  const goPrevMonth = () => {
+    let m = viewMonth - 1, y = viewYear;
+    if (m < 0) { m = 11; y--; }
+    setViewMonth(m); setViewYear(y);
+  };
+  const canGoNext = !(viewYear === todayDate.getFullYear() && viewMonth === todayDate.getMonth()) && viewYear <= todayDate.getFullYear();
+  const goNextMonth = () => {
+    if (!canGoNext) return;
+    let m = viewMonth + 1, y = viewYear;
+    if (m > 11) { m = 0; y++; }
+    setViewMonth(m); setViewYear(y);
+  };
+
+  const renderCalendar = () => {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push(<View key={`e${i}`} style={styles.calCell} />);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isFuture = dateStr > today;
+      const isSelected = dateStr === selectedDate;
+      const isToday = dateStr === today;
+      cells.push(
+        <TouchableOpacity
+          key={dateStr}
+          style={[styles.calCell, isSelected && styles.calCellSelected, isToday && !isSelected && styles.calCellToday]}
+          disabled={isFuture}
+          onPress={() => setSelectedDate(dateStr)}
+        >
+          <Text style={[styles.calNum, isFuture && styles.calNumFuture, isSelected && styles.calNumSelected]}>{d}</Text>
+        </TouchableOpacity>
+      );
+    }
+    return cells;
   };
 
   const handlePost = async () => {
@@ -100,7 +145,6 @@ export default function CreatePostScreen() {
     setUploading(true);
     let photoFailed = false;
     try {
-      // Photo is optional. Only try uploading if one was picked.
       let imageUrl = '';
       if (imageUri) {
         try {
@@ -120,21 +164,24 @@ export default function CreatePostScreen() {
         habitId: selectedHabit.id,
         caption: caption.trim(),
         imageUrl,
+        completedDate: selectedDate,   // which day this log is for
         likes: [],
         commentCount: 0,
         createdAt: serverTimestamp(),
       });
 
-      // 2) Mark the habit as DONE for today (logging the habit).
-      //    arrayUnion only adds today's date if it's not already there,
-      //    so posting twice in one day won't double-count.
+      // 2) Mark the habit DONE for the SELECTED date AND save the caption as
+      //    that day's journal (defaults to "Completed!" when caption is empty).
+      //    setDoc + merge deep-merges the journals map, so other days' journals
+      //    are preserved. arrayUnion won't duplicate an already-logged date.
       try {
-        await updateDoc(doc(db, 'habits', selectedHabit.id), {
-          completedDates: arrayUnion(getTodayString()),
+        await setDoc(doc(db, 'habits', selectedHabit.id), {
+          completedDates: arrayUnion(selectedDate),
           completed: true,
-        });
+          journals: { [selectedDate]: caption.trim() || 'Completed!' },
+        }, { merge: true });
       } catch (habitErr) {
-        // Post already succeeded; ignore habit-update failure
+        // post already succeeded; ignore
       }
 
       if (photoFailed) {
@@ -177,7 +224,7 @@ export default function CreatePostScreen() {
               </View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.removePhotoBtn} onPress={() => setImageUri(null)}>
-              <Text style={styles.removePhotoText}>✕ Remove photo</Text>g
+              <Text style={styles.removePhotoText}>✕ Remove photo</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -229,6 +276,29 @@ export default function CreatePostScreen() {
             ))
           )}
         </View>
+
+        {/* Date picker */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>When did you do it?</Text>
+          <View style={styles.calBox}>
+            <View style={styles.calHeader}>
+              <TouchableOpacity onPress={goPrevMonth} style={styles.calNavBtn}>
+                <Text style={styles.calNav}>‹</Text>
+              </TouchableOpacity>
+              <Text style={styles.calMonth}>{MONTH_NAMES[viewMonth]} {viewYear}</Text>
+              <TouchableOpacity onPress={goNextMonth} style={styles.calNavBtn} disabled={!canGoNext}>
+                <Text style={[styles.calNav, !canGoNext && styles.calNavDisabled]}>›</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.calDayNames}>
+              {DAY_NAMES.map((d, i) => <Text key={i} style={styles.calDayName}>{d}</Text>)}
+            </View>
+            <View style={styles.calGrid}>{renderCalendar()}</View>
+          </View>
+          <Text style={styles.selectedDateText}>
+            📅 {selectedDate}{selectedDate === today ? ' (today)' : ''}
+          </Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -261,4 +331,21 @@ const styles = StyleSheet.create({
   habitOptionText: { fontSize: 15, color: '#333' },
   habitOptionTextActive: { color: '#4CAF50', fontWeight: '600' },
   noHabits: { color: '#aaa', fontSize: 14 },
+  // Calendar
+  calBox: { borderWidth: 1, borderColor: '#eee', borderRadius: 12, padding: 12, backgroundColor: '#fafafa', alignItems: 'center' },
+  calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: 252, marginBottom: 10 },
+  calNavBtn: { paddingHorizontal: 12, paddingVertical: 4 },
+  calNav: { fontSize: 22, color: '#4CAF50', fontWeight: 'bold' },
+  calNavDisabled: { color: '#ddd' },
+  calMonth: { fontSize: 14, fontWeight: '600', color: '#333' },
+  calDayNames: { flexDirection: 'row', width: 252, marginBottom: 4 },
+  calDayName: { width: 36, textAlign: 'center', fontSize: 11, color: '#aaa', fontWeight: '600' },
+  calGrid: { flexDirection: 'row', flexWrap: 'wrap', width: 252 },
+  calCell: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', borderRadius: 18 },
+  calCellSelected: { backgroundColor: '#4CAF50' },
+  calCellToday: { borderWidth: 1.5, borderColor: '#4CAF50' },
+  calNum: { fontSize: 13, color: '#333' },
+  calNumFuture: { color: '#ddd' },
+  calNumSelected: { color: '#fff', fontWeight: 'bold' },
+  selectedDateText: { fontSize: 13, color: '#4CAF50', fontWeight: '600', marginTop: 12, textAlign: 'center' },
 });
