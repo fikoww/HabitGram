@@ -147,9 +147,10 @@ export default function HabitDetailScreen() {
     );
 
     const weekDates = getWeekDates();
-    const commitment = habit.commitment || 1;
+    const commitment = habit.commitment ?? 1;          // use ?? so 0 (no commitment) stays 0
+    const isNoCommitment = commitment === 0;
     const doneThisWeek = weekDates.filter((d) => (habit.completedDates || []).includes(d)).length;
-    const commitmentMet = doneThisWeek >= commitment;
+    const commitmentMet = commitment > 0 && doneThisWeek >= commitment;
     const totalDone = (habit.completedDates || []).length;
     const journalEntries = Object.entries(habit.journals || {}).sort((a, b) => b[0].localeCompare(a[0]));
     const years = getAvailableYears();
@@ -245,7 +246,12 @@ export default function HabitDetailScreen() {
             </TouchableOpacity>
 
             <Text style={styles.title}>{habit.name}</Text>
-            <Text style={styles.commitment}>🎯 {commitment}x per week</Text>
+            {/* Show commitment OR "no goal" label */}
+            {isNoCommitment ? (
+                <Text style={styles.commitment}>✨ Just do it (no set goal)</Text>
+            ) : (
+                <Text style={styles.commitment}>🎯 {commitment}x per week</Text>
+            )}
 
             {/* Stats */}
             <View style={styles.statsRow}>
@@ -253,10 +259,18 @@ export default function HabitDetailScreen() {
                     <Text style={styles.statNumber}>{totalDone}</Text>
                     <Text style={styles.statLabel}>Total Done</Text>
                 </View>
-                <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>{doneThisWeek}/{commitment}</Text>
-                    <Text style={styles.statLabel}>This Week</Text>
-                </View>
+                {/* "This Week" stat changes meaning for no-commitment habits */}
+                {isNoCommitment ? (
+                    <View style={styles.statBox}>
+                        <Text style={styles.statNumber}>{doneThisWeek}</Text>
+                        <Text style={styles.statLabel}>This Week</Text>
+                    </View>
+                ) : (
+                    <View style={styles.statBox}>
+                        <Text style={styles.statNumber}>{doneThisWeek}/{commitment}</Text>
+                        <Text style={styles.statLabel}>This Week</Text>
+                    </View>
+                )}
                 <View style={styles.statBox}>
                     <Text style={styles.statNumber}>{journalEntries.length}</Text>
                     <Text style={styles.statLabel}>Journals</Text>
@@ -267,9 +281,13 @@ export default function HabitDetailScreen() {
             <View style={[styles.card, commitmentMet && styles.cardDone]}>
                 <View style={styles.weekHeader}>
                     <Text style={styles.cardTitle}>This Week</Text>
-                    <Text style={[styles.weekProgress, commitmentMet && styles.weekProgressDone]}>
-                        {doneThisWeek}/{commitment} done
-                    </Text>
+                    {isNoCommitment ? (
+                        <Text style={styles.weekProgress}>{doneThisWeek} this week</Text>
+                    ) : (
+                        <Text style={[styles.weekProgress, commitmentMet && styles.weekProgressDone]}>
+                            {doneThisWeek}/{commitment} done
+                        </Text>
+                    )}
                 </View>
                 <View style={styles.weekRow}>
                     {weekDates.map((date, i) => {
