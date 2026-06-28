@@ -31,7 +31,6 @@ const getWeekDates = () => {
 };
 
 const getWeekStreak = (completedDates: string[], commitment: number) => {
-    // "No commitment" habits (commitment 0) don't use weekly streaks
     if (!commitment || commitment <= 0) return { current: 0, max: 0 };
     if (!completedDates || completedDates.length === 0) return { current: 0, max: 0 };
 
@@ -91,7 +90,6 @@ export default function ProfileScreen() {
     const [changeCommitmentHabit, setChangeCommitmentHabit] = useState<Habit | null>(null);
     const [newCommitment, setNewCommitment] = useState(1);
 
-    // Add Habit modal state
     const [addHabitVisible, setAddHabitVisible] = useState(false);
     const [allHabitList, setAllHabitList] = useState<HabitListItem[]>([]);
     const [loadingHabitList, setLoadingHabitList] = useState(false);
@@ -344,16 +342,16 @@ export default function ProfileScreen() {
                                 })}
                             </View>
 
-                            {/* Stats differ for "no commitment" habits */}
+                            {/* Stats — purple fire for commitment, red fire for no-commitment */}
                             {isNoCommitment ? (
                                 <View style={styles.habitStatsRow}>
                                     <Text style={styles.habitStat}>✨ Just do it (no goal)</Text>
-                                    <Text style={styles.habitStat}>🔥 {totalDone}x done total</Text>
+                                    <Text style={styles.habitStatRed}>🔥 {totalDone}x done total</Text>
                                 </View>
                             ) : (
                                 <View style={styles.habitStatsRow}>
                                     <Text style={styles.habitStat}>🎯 {commitment}x/week</Text>
-                                    <Text style={styles.habitStat}>🔥 {current} week(s) streak</Text>
+                                    <Text style={styles.habitStatPurple}>🔥 {current} week(s) streak</Text>
                                     <Text style={styles.habitStat}>🏆 Best: {max} week(s)</Text>
                                 </View>
                             )}
@@ -546,6 +544,8 @@ const styles = StyleSheet.create({
     dayLabelDone: { color: '#fff' },
     habitStatsRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
     habitStat: { fontSize: 12, color: '#666' },
+    habitStatPurple: { fontSize: 12, color: '#8E24AA', fontWeight: '700' },
+    habitStatRed: { fontSize: 12, color: '#E53935', fontWeight: '700' },
     overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     dropdownMenu: { position: 'absolute', top: 100, right: 16, backgroundColor: '#fff', borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, minWidth: 180 },
     menuItem: { padding: 16 },

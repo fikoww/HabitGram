@@ -37,6 +37,39 @@ const getWeekDates = () => {
     return dates;
 };
 
+const getWeekStreak = (completedDates: string[], commitment: number) => {
+    if (!commitment || commitment <= 0) return { current: 0, max: 0 };
+    if (!completedDates || completedDates.length === 0) return { current: 0, max: 0 };
+
+    const weekMap: Record<string, number> = {};
+    completedDates.forEach((dateStr) => {
+        const d = new Date(dateStr);
+        const day = d.getDay();
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - ((day + 6) % 7));
+        const weekKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+        weekMap[weekKey] = (weekMap[weekKey] || 0) + 1;
+    });
+
+    const today = new Date();
+    const todayDay = today.getDay();
+    const thisMonday = new Date(today);
+    thisMonday.setDate(today.getDate() - ((todayDay + 6) % 7));
+
+    let checkMonday = new Date(thisMonday);
+    let currentStreak = 0;
+    while (true) {
+        const weekKey = `${checkMonday.getFullYear()}-${String(checkMonday.getMonth() + 1).padStart(2, '0')}-${String(checkMonday.getDate()).padStart(2, '0')}`;
+        if (weekMap[weekKey] >= commitment) {
+            currentStreak++;
+            checkMonday.setDate(checkMonday.getDate() - 7);
+        } else {
+            break;
+        }
+    }
+    return { current: currentStreak, max: 0 };
+};
+
 export default function HabitDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const [habit, setHabit] = useState<Habit | null>(null);
@@ -149,6 +182,7 @@ export default function HabitDetailScreen() {
     const weekDates = getWeekDates();
     const commitment = habit.commitment ?? 1;          // use ?? so 0 (no commitment) stays 0
     const isNoCommitment = commitment === 0;
+    const { current: currentStreak } = getWeekStreak(habit.completedDates || [], commitment);
     const doneThisWeek = weekDates.filter((d) => (habit.completedDates || []).includes(d)).length;
     const commitmentMet = commitment > 0 && doneThisWeek >= commitment;
     const totalDone = (habit.completedDates || []).length;
@@ -246,11 +280,17 @@ export default function HabitDetailScreen() {
             </TouchableOpacity>
 
             <Text style={styles.title}>{habit.name}</Text>
-            {/* Show commitment OR "no goal" label */}
+            {/* Show commitment OR "no goal" label + colored fire streak */}
             {isNoCommitment ? (
-                <Text style={styles.commitment}>✨ Just do it (no set goal)</Text>
+                <View style={styles.subtitleRow}>
+                    <Text style={styles.commitment}>✨ Just do it (no set goal)</Text>
+                    <Text style={styles.streakRed}>🔥 {totalDone}x total</Text>
+                </View>
             ) : (
-                <Text style={styles.commitment}>🎯 {commitment}x per week</Text>
+                <View style={styles.subtitleRow}>
+                    <Text style={styles.commitment}>🎯 {commitment}x per week</Text>
+                    <Text style={styles.streakPurple}>🔥 {currentStreak} week(s) streak</Text>
+                </View>
             )}
 
             {/* Stats */}
@@ -340,7 +380,10 @@ const styles = StyleSheet.create({
     backButton: { marginTop: 60, marginLeft: 16, marginBottom: 8 },
     backText: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
     title: { fontSize: 26, fontWeight: 'bold', paddingHorizontal: 16, marginBottom: 4 },
-    commitment: { fontSize: 13, color: '#888', paddingHorizontal: 16, marginBottom: 16 },
+    commitment: { fontSize: 13, color: '#888' },
+    subtitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
+    streakPurple: { fontSize: 13, color: '#8E24AA', fontWeight: '700' },
+    streakRed: { fontSize: 13, color: '#E53935', fontWeight: '700' },
     statsRow: { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, padding: 12, marginBottom: 12, justifyContent: 'space-around' },
     statBox: { alignItems: 'center' },
     statNumber: { fontSize: 20, fontWeight: 'bold', color: '#4CAF50' },
