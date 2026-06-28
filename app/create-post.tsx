@@ -177,7 +177,7 @@ export default function CreatePostScreen() {
               </View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.removePhotoBtn} onPress={() => setImageUri(null)}>
-              <Text style={styles.removePhotoText}>✕ Remove photo</Text>
+              <Text style={styles.removePhotoText}>✕ Remove photo</Text>g
             </TouchableOpacity>
           </View>
         ) : (
