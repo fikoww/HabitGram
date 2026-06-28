@@ -4,9 +4,9 @@ import { addDoc, collection, getDocs, query, serverTimestamp, where } from 'fire
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert, Image, KeyboardAvoidingView, Platform, ScrollView,
-    StyleSheet, Text, TextInput, TouchableOpacity, View
+  ActivityIndicator,
+  Alert, Image, KeyboardAvoidingView, Platform, ScrollView,
+  StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import { auth, db, storage } from '../firebaseConfig';
 
@@ -25,12 +25,10 @@ export default function CreatePostScreen() {
     const user = auth.currentUser;
     if (!user) return;
 
-    // Load user habits
     getDocs(query(collection(db, 'habits'), where('userId', '==', user.uid))).then((snap) => {
       setHabits(snap.docs.map((d) => ({ id: d.id, name: d.data().name })));
     });
 
-    // Load user profile
     import('firebase/firestore').then(({ getDoc, doc }) => {
       getDoc(doc(db, 'users', user.uid)).then((userDoc) => {
         if (userDoc.exists()) {
@@ -70,13 +68,18 @@ export default function CreatePostScreen() {
     if (!result.canceled) setImageUri(result.assets[0].uri);
   };
 
+  // Upload with a 15s timeout so it never hangs forever (e.g. CORS on web)
   const uploadImageToStorage = async (uri: string, userId: string): Promise<string> => {
     const response = await fetch(uri);
     const blob = await response.blob();
     const filename = `posts/${userId}/${Date.now()}.jpg`;
     const storageRef = ref(storage, filename);
-    await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
+
+    const uploadPromise = uploadBytes(storageRef, blob).then(() => getDownloadURL(storageRef));
+    const timeoutPromise = new Promise<string>((_, reject) =>
+      setTimeout(() => reject(new Error('Upload timed out')), 15000)
+    );
+    return await Promise.race([uploadPromise, timeoutPromise]);
   };
 
   const handlePost = async () => {
@@ -84,17 +87,25 @@ export default function CreatePostScreen() {
       Alert.alert('Pick a habit', 'Select which habit this post is for.');
       return;
     }
-    if (!imageUri) {
-      Alert.alert('Add a photo', 'Please attach a photo as proof!');
-      return;
-    }
 
     const user = auth.currentUser;
     if (!user) return;
 
     setUploading(true);
+    let photoFailed = false;
     try {
-      const imageUrl = await uploadImageToStorage(imageUri, user.uid);
+      // Photo is optional. Only try uploading if one was picked.
+      let imageUrl = '';
+      if (imageUri) {
+        try {
+          imageUrl = await uploadImageToStorage(imageUri, user.uid);
+        } catch (uploadErr) {
+          // Upload failed or timed out (e.g. CORS on web) — post anyway without photo
+          photoFailed = true;
+          imageUrl = '';
+        }
+      }
+
       await addDoc(collection(db, 'posts'), {
         userId: user.uid,
         displayName,
@@ -107,9 +118,18 @@ export default function CreatePostScreen() {
         commentCount: 0,
         createdAt: serverTimestamp(),
       });
-      router.replace('/(tabs)/home');
+
+      if (photoFailed) {
+        Alert.alert(
+          'Posted (without photo)',
+          'Your post was shared, but the photo could not be uploaded on web. Try from the mobile app to include photos.',
+          [{ text: 'OK', onPress: () => router.replace('/(tabs)/home') }]
+        );
+      } else {
+        router.replace('/(tabs)/home');
+      }
     } catch (e) {
-      Alert.alert('Error', 'Failed to upload post. Try again.');
+      Alert.alert('Error', 'Failed to create post. Try again.');
     } finally {
       setUploading(false);
     }
@@ -129,19 +149,24 @@ export default function CreatePostScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Image picker */}
+        {/* Image picker (optional) */}
         {imageUri ? (
-          <TouchableOpacity onPress={pickImage}>
-            <Image source={{ uri: imageUri }} style={styles.previewImage} />
-            <View style={styles.changePhotoOverlay}>
-              <Text style={styles.changePhotoText}>Tap to change</Text>
-            </View>
-          </TouchableOpacity>
+          <View>
+            <TouchableOpacity onPress={pickImage}>
+              <Image source={{ uri: imageUri }} style={styles.previewImage} />
+              <View style={styles.changePhotoOverlay}>
+                <Text style={styles.changePhotoText}>Tap to change</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.removePhotoBtn} onPress={() => setImageUri(null)}>
+              <Text style={styles.removePhotoText}>✕ Remove photo</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={styles.imagePicker}>
             <Text style={styles.imagePickerEmoji}>📷</Text>
-            <Text style={styles.imagePickerTitle}>Add proof photo</Text>
-            <Text style={styles.imagePickerSubtitle}>Show that you actually did it!</Text>
+            <Text style={styles.imagePickerTitle}>Add a photo (optional)</Text>
+            <Text style={styles.imagePickerSubtitle}>Add proof if you want — or just post!</Text>
             <View style={styles.imagePickerBtns}>
               <TouchableOpacity style={styles.imageBtn} onPress={takePhoto}>
                 <Text style={styles.imageBtnText}>📸 Camera</Text>
@@ -159,6 +184,7 @@ export default function CreatePostScreen() {
           <TextInput
             style={styles.captionInput}
             placeholder="How did it go? Share your experience..."
+            placeholderTextColor="#bbb"
             value={caption}
             onChangeText={setCaption}
             multiline
@@ -207,9 +233,11 @@ const styles = StyleSheet.create({
   previewImage: { width: '100%', height: 300 },
   changePhotoOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.4)', padding: 8, alignItems: 'center' },
   changePhotoText: { color: '#fff', fontWeight: '600' },
+  removePhotoBtn: { alignItems: 'center', paddingVertical: 10 },
+  removePhotoText: { color: '#ff4444', fontWeight: '600', fontSize: 14 },
   section: { padding: 16, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
   sectionLabel: { fontSize: 15, fontWeight: '600', marginBottom: 10, color: '#333' },
-  captionInput: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#fafafa', minHeight: 80, textAlignVertical: 'top' },
+  captionInput: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#fafafa', minHeight: 80, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
   habitOption: { padding: 12, borderWidth: 1, borderColor: '#eee', borderRadius: 10, marginBottom: 8 },
   habitOptionActive: { borderColor: '#4CAF50', backgroundColor: '#f0fff0' },
   habitOptionText: { fontSize: 15, color: '#333' },
