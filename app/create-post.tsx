@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { addDoc, collection, getDocs, query, serverTimestamp, where } from 'firebase/firestore';
+import { addDoc, arrayUnion, collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
 import {
@@ -11,6 +11,12 @@ import {
 import { auth, db, storage } from '../firebaseConfig';
 
 type Habit = { id: string; name: string };
+
+// Today's date as YYYY-MM-DD (same format used in habit-detail & profile)
+const getTodayString = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export default function CreatePostScreen() {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -100,12 +106,12 @@ export default function CreatePostScreen() {
         try {
           imageUrl = await uploadImageToStorage(imageUri, user.uid);
         } catch (uploadErr) {
-          // Upload failed or timed out (e.g. CORS on web) — post anyway without photo
           photoFailed = true;
           imageUrl = '';
         }
       }
 
+      // 1) Create the post
       await addDoc(collection(db, 'posts'), {
         userId: user.uid,
         displayName,
@@ -119,10 +125,22 @@ export default function CreatePostScreen() {
         createdAt: serverTimestamp(),
       });
 
+      // 2) Mark the habit as DONE for today (logging the habit).
+      //    arrayUnion only adds today's date if it's not already there,
+      //    so posting twice in one day won't double-count.
+      try {
+        await updateDoc(doc(db, 'habits', selectedHabit.id), {
+          completedDates: arrayUnion(getTodayString()),
+          completed: true,
+        });
+      } catch (habitErr) {
+        // Post already succeeded; ignore habit-update failure
+      }
+
       if (photoFailed) {
         Alert.alert(
           'Posted (without photo)',
-          'Your post was shared, but the photo could not be uploaded on web. Try from the mobile app to include photos.',
+          'Your post was shared and the habit was marked done, but the photo could not be uploaded on web. Try the mobile app for photos.',
           [{ text: 'OK', onPress: () => router.replace('/(tabs)/home') }]
         );
       } else {
