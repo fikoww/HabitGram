@@ -6,11 +6,14 @@ export default function RootLayout() {
   return (
     <>
       <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
+         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="register" options={{ headerShown: false }} />
+        <Stack.Screen name="user-profile" options={{ headerShown: false }} />
         <Stack.Screen name="setup-profile" options={{ headerShown: false }} />
         <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
         <Stack.Screen name="create-post" options={{ headerShown: false }} />
+        <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="habit-detail" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
