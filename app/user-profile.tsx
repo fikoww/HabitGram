@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { db } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 
 type Habit = {
     id: string;
@@ -74,6 +75,9 @@ const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export default function UserProfileScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
+    const [myId, setMyId] = useState('');
+    const [myInfo, setMyInfo] = useState<{ displayName: string; username: string; photoUrl: string }>({ displayName: '', username: '', photoUrl: '' });
+
     const [displayName, setDisplayName] = useState('');
     const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
@@ -82,8 +86,29 @@ export default function UserProfileScreen() {
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
 
+    // Follow state
+    const [followState, setFollowState] = useState<'none' | 'requested' | 'following'>('none');
+    const [followersCount, setFollowersCount] = useState(0);
+    const [followingCount, setFollowingCount] = useState(0);
+    const [busy, setBusy] = useState(false);
+
     const weekDates = getWeekDates();
 
+    // Current user id + my info (for storing in the request)
+    useEffect(() => {
+        const unsub = onAuthStateChanged(auth, async (user) => {
+            if (!user) return;
+            setMyId(user.uid);
+            const meDoc = await getDoc(doc(db, 'users', user.uid));
+            if (meDoc.exists()) {
+                const d = meDoc.data();
+                setMyInfo({ displayName: d.displayName || '', username: d.username || '', photoUrl: d.photoUrl || '' });
+            }
+        });
+        return () => unsub();
+    }, []);
+
+    // Load target user + their habits
     useEffect(() => {
         if (!id) return;
         const unsubUser = onSnapshot(doc(db, 'users', id), (snap) => {
@@ -104,8 +129,63 @@ export default function UserProfileScreen() {
             loaded.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
             setHabits(loaded);
         });
-        return () => { unsubUser(); unsubHabits(); };
+        // Follower/following counts (of the target user)
+        const unsubFollowers = onSnapshot(collection(db, 'users', id, 'followers'), (s) => setFollowersCount(s.size));
+        const unsubFollowing = onSnapshot(collection(db, 'users', id, 'following'), (s) => setFollowingCount(s.size));
+        return () => { unsubUser(); unsubHabits(); unsubFollowers(); unsubFollowing(); };
     }, [id]);
+
+    // My relationship to the target (following? requested?)
+    useEffect(() => {
+        if (!myId || !id || myId === id) return;
+        const unsubFollowing = onSnapshot(doc(db, 'users', myId, 'following', id), (snap) => {
+            if (snap.exists()) setFollowState('following');
+            else {
+                // not following — check if request pending
+                setFollowState((prev) => (prev === 'following' ? 'none' : prev));
+            }
+        });
+        const unsubReq = onSnapshot(doc(db, 'users', id, 'followRequests', myId), (snap) => {
+            setFollowState((prev) => {
+                if (prev === 'following') return prev;
+                return snap.exists() ? 'requested' : 'none';
+            });
+        });
+        return () => { unsubFollowing(); unsubReq(); };
+    }, [myId, id]);
+
+    const sendRequest = async () => {
+        if (!myId || !id) return;
+        setBusy(true);
+        try {
+            await setDoc(doc(db, 'users', id, 'followRequests', myId), {
+                displayName: myInfo.displayName,
+                username: myInfo.username,
+                photoUrl: myInfo.photoUrl,
+                requestedAt: serverTimestamp(),
+            });
+            setFollowState('requested');
+        } finally { setBusy(false); }
+    };
+
+    const cancelRequest = async () => {
+        if (!myId || !id) return;
+        setBusy(true);
+        try {
+            await deleteDoc(doc(db, 'users', id, 'followRequests', myId));
+            setFollowState('none');
+        } finally { setBusy(false); }
+    };
+
+    const unfollow = async () => {
+        if (!myId || !id) return;
+        setBusy(true);
+        try {
+            await deleteDoc(doc(db, 'users', myId, 'following', id));
+            await deleteDoc(doc(db, 'users', id, 'followers', myId));
+            setFollowState('none');
+        } finally { setBusy(false); }
+    };
 
     const mostConsistent = habits.reduce((best, h) => {
         if (!best) return h;
@@ -134,10 +214,11 @@ export default function UserProfileScreen() {
         );
     }
 
+    const isMe = myId === id;
+
     return (
         <View style={{ flex: 1 }}>
             <ScrollView style={styles.container}>
-                {/* Back button */}
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <Text style={styles.backText}>← Back</Text>
                 </TouchableOpacity>
@@ -154,6 +235,29 @@ export default function UserProfileScreen() {
                     <Text style={styles.name}>{displayName}</Text>
                     <Text style={styles.username}>@{username}</Text>
                     {bio ? <Text style={styles.bio}>{bio}</Text> : null}
+
+                    {/* Follower / following counts */}
+                    <View style={styles.followRow}>
+                        <Text style={styles.followItem}><Text style={styles.followNum}>{followersCount}</Text> Followers</Text>
+                        <Text style={styles.followItem}><Text style={styles.followNum}>{followingCount}</Text> Following</Text>
+                    </View>
+
+                    {/* Follow button (only when viewing someone else) */}
+                    {!isMe && (
+                        followState === 'following' ? (
+                            <TouchableOpacity style={[styles.followBtn, styles.followingBtn]} onPress={unfollow} disabled={busy}>
+                                <Text style={styles.followingBtnText}>Following ✓</Text>
+                            </TouchableOpacity>
+                        ) : followState === 'requested' ? (
+                            <TouchableOpacity style={[styles.followBtn, styles.requestedBtn]} onPress={cancelRequest} disabled={busy}>
+                                <Text style={styles.requestedBtnText}>Requested</Text>
+                            </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity style={styles.followBtn} onPress={sendRequest} disabled={busy}>
+                                <Text style={styles.followBtnText}>Follow</Text>
+                            </TouchableOpacity>
+                        )
+                    )}
                 </View>
 
                 {/* Stats */}
@@ -207,14 +311,14 @@ export default function UserProfileScreen() {
 
                             {isNoCommitment ? (
                                 <View style={styles.habitStatsRow}>
-                                    <Text style={styles.habitStat}>Just do it (no goal)</Text>
+                                    <Text style={styles.habitStat}>✨ Just do it (no goal)</Text>
                                     <Text style={styles.habitStatRed}>🔥 {totalDone}x done total</Text>
                                 </View>
                             ) : (
                                 <View style={styles.habitStatsRow}>
                                     <Text style={styles.habitStat}>🎯 {commitment}x/week</Text>
                                     <Text style={styles.habitStatPurple}>🔥 {current} week(s) streak</Text>
-                                    <Text style={styles.habitStat}>Best: {max} week(s)</Text>
+                                    <Text style={styles.habitStat}>🏆 Best: {max} week(s)</Text>
                                 </View>
                             )}
                         </View>
@@ -238,6 +342,15 @@ const styles = StyleSheet.create({
     name: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
     username: { fontSize: 15, color: '#888' },
     bio: { fontSize: 14, color: '#555', textAlign: 'center', marginTop: 8, paddingHorizontal: 32, lineHeight: 20 },
+    followRow: { flexDirection: 'row', gap: 24, marginTop: 14 },
+    followItem: { fontSize: 14, color: '#555' },
+    followNum: { fontWeight: 'bold', color: '#333' },
+    followBtn: { marginTop: 16, backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 48 },
+    followBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+    followingBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#4CAF50' },
+    followingBtnText: { color: '#4CAF50', fontWeight: 'bold', fontSize: 15 },
+    requestedBtn: { backgroundColor: '#f0f0f0' },
+    requestedBtnText: { color: '#888', fontWeight: 'bold', fontSize: 15 },
     statsRow: { flexDirection: 'row', backgroundColor: '#fff', marginTop: 12, padding: 16, justifyContent: 'space-around' },
     statBox: { alignItems: 'center', flex: 1, paddingHorizontal: 4 },
     statNumber: { fontSize: 18, fontWeight: 'bold', color: '#4CAF50', textAlign: 'center' },

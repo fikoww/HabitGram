@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
 type Habit = {
@@ -98,6 +98,11 @@ export default function ProfileScreen() {
     const [newHabitCommitment, setNewHabitCommitment] = useState(1);
     const [addError, setAddError] = useState('');
 
+    // Follow counts
+    const [followersCount, setFollowersCount] = useState(0);
+    const [followingCount, setFollowingCount] = useState(0);
+    const [pendingCount, setPendingCount] = useState(0);
+
     const weekDates = getWeekDates();
 
     useEffect(() => {
@@ -126,6 +131,18 @@ export default function ProfileScreen() {
             if (unsubscribeHabits) unsubscribeHabits();
             if (unsubscribeUser) unsubscribeUser();
         };
+    }, []);
+
+    // Listen to my followers / following / pending-request counts
+    useEffect(() => {
+        let unsubs: (() => void)[] = [];
+        const unsubAuth = onAuthStateChanged(auth, (user) => {
+            if (!user) return;
+            unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followers'), (s) => setFollowersCount(s.size)));
+            unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'following'), (s) => setFollowingCount(s.size)));
+            unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followRequests'), (s) => setPendingCount(s.size)));
+        });
+        return () => { unsubAuth(); unsubs.forEach((u) => u()); };
     }, []);
 
     const handleLogout = async () => {
@@ -249,6 +266,19 @@ export default function ProfileScreen() {
 
                     <TouchableOpacity style={styles.editButton} onPress={() => router.push('/edit-profile')}>
                         <Text style={styles.editButtonText}>Edit Profile</Text>
+                    </TouchableOpacity>
+
+                    {/* Follower / following counts */}
+                    <View style={styles.followRow}>
+                        <Text style={styles.followItem}><Text style={styles.followNum}>{followersCount}</Text> Followers</Text>
+                        <Text style={styles.followItem}><Text style={styles.followNum}>{followingCount}</Text> Following</Text>
+                    </View>
+
+                    {/* Follow Requests button */}
+                    <TouchableOpacity style={[styles.requestsButton, pendingCount > 0 && styles.requestsButtonActive]} onPress={() => router.push('/follow-requests')}>
+                        <Text style={[styles.requestsButtonText, pendingCount > 0 && styles.requestsButtonTextActive]}>
+                            👥 Follow Requests{pendingCount > 0 ? ` (${pendingCount})` : ''}
+                        </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.menuButton} onPress={() => setMenuVisible(!menuVisible)}>
@@ -515,6 +545,13 @@ const styles = StyleSheet.create({
     bio: { fontSize: 14, color: '#555', textAlign: 'center', marginTop: 8, paddingHorizontal: 32, lineHeight: 20 },
     editButton: { marginTop: 16, borderWidth: 1, borderColor: '#4CAF50', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 32 },
     editButtonText: { color: '#4CAF50', fontWeight: '600', fontSize: 14 },
+    followRow: { flexDirection: 'row', gap: 24, marginTop: 14 },
+    followItem: { fontSize: 14, color: '#555' },
+    followNum: { fontWeight: 'bold', color: '#333' },
+    requestsButton: { marginTop: 12, backgroundColor: '#f0f0f0', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 },
+    requestsButtonActive: { backgroundColor: '#4CAF50' },
+    requestsButtonText: { color: '#333', fontWeight: '600', fontSize: 13 },
+    requestsButtonTextActive: { color: '#fff' },
     menuButton: { position: 'absolute', top: 60, right: 20, padding: 8 },
     menuDots: { fontSize: 24, color: '#333', fontWeight: 'bold' },
     statsRow: { flexDirection: 'row', backgroundColor: '#fff', marginTop: 12, padding: 16, justifyContent: 'space-around' },
