@@ -74,40 +74,66 @@ export default function HomeScreen() {
   const loadFollowingAndPosts = async (uid: string) => {
     setLoading(true);
     try {
-      // Get following list
+      const byId: Record<string, Post> = {};
+      const collect = (snap: any) => {
+        snap.docs.forEach((d: any) => {
+          byId[d.id] = { id: d.id, ...(d.data() as Omit<Post, 'id'>) };
+        });
+      };
+
+      // 1) Post kamu sendiri + semua yang kamu follow (tanpa orderBy → tanpa index)
       const followSnap = await getDocs(collection(db, 'users', uid, 'following'));
-      const ids = followSnap.docs.map((d) => d.id);
-      setFollowingIds(ids);
+      const followIds = followSnap.docs.map((d) => d.id);
+      setFollowingIds(followIds);
 
-      if (ids.length === 0) {
-        setPosts([]);
-        setLoading(false);
-        return;
+      const authorIds = Array.from(new Set([uid, ...followIds]));
+      for (let i = 0; i < authorIds.length; i += 10) {
+        const chunk = authorIds.slice(i, i + 10);
+        const snap = await getDocs(query(collection(db, 'posts'), where('userId', 'in', chunk)));
+        collect(snap);
       }
 
-      // Firestore 'in' query max 30 items
-      const chunks = [];
-      for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10));
+      // 2) Discovery: orang lain (akun publik) yang mengerjakan habit yang sama
+      const myHabitsSnap = await getDocs(query(collection(db, 'habits'), where('userId', '==', uid)));
+      const myHabitNames = Array.from(
+        new Set(myHabitsSnap.docs.map((d) => d.data().name as string).filter(Boolean))
+      ).slice(0, 10);
 
-      const allPosts: Post[] = [];
-      for (const chunk of chunks) {
-        const q = query(
-          collection(db, 'posts'),
-          where('userId', 'in', chunk),
-          orderBy('createdAt', 'desc')
+      if (myHabitNames.length > 0) {
+        const discovery: Post[] = [];
+        for (let i = 0; i < myHabitNames.length; i += 10) {
+          const chunk = myHabitNames.slice(i, i + 10);
+          const snap = await getDocs(query(collection(db, 'posts'), where('habitName', 'in', chunk)));
+          snap.docs.forEach((d) => {
+            const data = d.data() as Omit<Post, 'id'>;
+            if (!byId[d.id] && data.userId !== uid) discovery.push({ id: d.id, ...data });
+          });
+        }
+
+        const discoveryAuthorIds = Array.from(new Set(discovery.map((p) => p.userId))).slice(0, 30);
+        const publicAuthors = new Set<string>();
+        await Promise.all(
+          discoveryAuthorIds.map(async (aid) => {
+            const uDoc = await getDoc(doc(db, 'users', aid));
+            if (uDoc.exists() && uDoc.data().isPrivate === false) publicAuthors.add(aid);
+          })
         );
-        const snap = await getDocs(q);
-        snap.docs.forEach((d) => allPosts.push({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
+        discovery.forEach((p) => {
+          if (publicAuthors.has(p.userId)) byId[p.id] = p;
+        });
       }
 
-      allPosts.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      const allPosts = Object.values(byId).sort(
+        (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+      );
       setPosts(allPosts);
+    } catch (e) {
+      setPosts([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
-
   const handleLike = async (post: Post) => {
     if (!currentUserId) return;
     const ref = doc(db, 'posts', post.id);
