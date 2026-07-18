@@ -82,6 +82,7 @@ export default function UserProfileScreen() {
     const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
     const [photoUrl, setPhotoUrl] = useState('');
+    const [isPrivate, setIsPrivate] = useState(false);
     const [habits, setHabits] = useState<Habit[]>([]);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
@@ -118,6 +119,7 @@ export default function UserProfileScreen() {
                 setUsername(data.username || '');
                 setBio(data.bio || '');
                 setPhotoUrl(data.photoUrl || '');
+                setIsPrivate(data.isPrivate === true);
             } else {
                 setNotFound(true);
             }
@@ -168,6 +170,17 @@ export default function UserProfileScreen() {
         } finally { setBusy(false); }
     };
 
+    // Public account: follow immediately (no approval needed)
+    const sendFollow = async () => {
+        if (!myId || !id) return;
+        setBusy(true);
+        try {
+            await setDoc(doc(db, 'users', myId, 'following', id), { createdAt: serverTimestamp() });
+            await setDoc(doc(db, 'users', id, 'followers', myId), { createdAt: serverTimestamp() });
+            setFollowState('following');
+        } finally { setBusy(false); }
+    };
+
     const cancelRequest = async () => {
         if (!myId || !id) return;
         setBusy(true);
@@ -215,6 +228,7 @@ export default function UserProfileScreen() {
     }
 
     const isMe = myId === id;
+    const locked = isPrivate && !isMe && followState !== 'following';
 
     return (
         <View style={{ flex: 1 }}>
@@ -232,7 +246,7 @@ export default function UserProfileScreen() {
                             <Text style={styles.avatarText}>{displayName ? displayName[0].toUpperCase() : '?'}</Text>
                         </View>
                     )}
-                    <Text style={styles.name}>{displayName}</Text>
+                    <Text style={styles.name}>{displayName} {isPrivate && <Text style={styles.lockBadge}>🔒</Text>}</Text>
                     <Text style={styles.username}>@{username}</Text>
                     {bio ? <Text style={styles.bio}>{bio}</Text> : null}
 
@@ -253,77 +267,88 @@ export default function UserProfileScreen() {
                                 <Text style={styles.requestedBtnText}>Requested</Text>
                             </TouchableOpacity>
                         ) : (
-                            <TouchableOpacity style={styles.followBtn} onPress={sendRequest} disabled={busy}>
+                            <TouchableOpacity style={styles.followBtn} onPress={isPrivate ? sendRequest : sendFollow} disabled={busy}>
                                 <Text style={styles.followBtnText}>Follow</Text>
                             </TouchableOpacity>
                         )
                     )}
                 </View>
 
-                {/* Stats */}
-                <View style={styles.statsRow}>
-                    <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>{habits.length}</Text>
-                        <Text style={styles.statLabel}>Habits</Text>
+                {/* Locked state for private accounts */}
+                {locked ? (
+                    <View style={styles.lockedBox}>
+                        <Text style={styles.lockedEmoji}>🔒</Text>
+                        <Text style={styles.lockedTitle}>This Account is Private</Text>
+                        <Text style={styles.lockedText}>Follow {displayName || 'this user'} to see their habits and streaks.</Text>
                     </View>
-                    <View style={styles.statBox}>
-                        <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
-                            {mostConsistent?.name || '-'}
-                        </Text>
-                        <Text style={styles.statLabel}>Most Consistent</Text>
-                    </View>
-                    <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>{longestStreak} week(s)</Text>
-                        <Text style={styles.statLabel}>Longest Streak</Text>
-                    </View>
-                </View>
-
-                {/* Habit list (view-only) */}
-                <Text style={styles.sectionTitle}>{displayName ? `${displayName}'s Habits` : 'Habits'}</Text>
-                {habits.length === 0 && (
-                    <Text style={styles.emptyText}>No habits yet.</Text>
-                )}
-                {habits.map((habit) => {
-                    const commitment = habit.commitment ?? 1;
-                    const isNoCommitment = commitment === 0;
-                    const { current, max } = getWeekStreak(habit.completedDates || [], commitment);
-                    const totalDone = (habit.completedDates || []).length;
-
-                    return (
-                        <View key={habit.id} style={styles.habitCard}>
-                            <View style={styles.habitHeader}>
-                                <View style={styles.habitTitleRow}>
-                                    {habit.pinned && <Text style={styles.pinIcon}>📌 </Text>}
-                                    <Text style={styles.habitName}>{habit.name}</Text>
-                                </View>
+                ) : (
+                    <>
+                        {/* Stats */}
+                        <View style={styles.statsRow}>
+                            <View style={styles.statBox}>
+                                <Text style={styles.statNumber}>{habits.length}</Text>
+                                <Text style={styles.statLabel}>Habits</Text>
                             </View>
-
-                            <View style={styles.weekRow}>
-                                {weekDates.map((date, i) => {
-                                    const done = (habit.completedDates || []).includes(date);
-                                    return (
-                                        <View key={date} style={[styles.dayCircle, done && styles.dayCircleDone]}>
-                                            <Text style={[styles.dayLabel, done && styles.dayLabelDone]}>{DAYS[i]}</Text>
-                                        </View>
-                                    );
-                                })}
+                            <View style={styles.statBox}>
+                                <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+                                    {mostConsistent?.name || '-'}
+                                </Text>
+                                <Text style={styles.statLabel}>Most Consistent</Text>
                             </View>
-
-                            {isNoCommitment ? (
-                                <View style={styles.habitStatsRow}>
-                                    <Text style={styles.habitStat}>✨ Just do it (no goal)</Text>
-                                    <Text style={styles.habitStatRed}>🔥 {totalDone}x done total</Text>
-                                </View>
-                            ) : (
-                                <View style={styles.habitStatsRow}>
-                                    <Text style={styles.habitStat}>🎯 {commitment}x/week</Text>
-                                    <Text style={styles.habitStatPurple}>🔥 {current} week(s) streak</Text>
-                                    <Text style={styles.habitStat}>🏆 Best: {max} week(s)</Text>
-                                </View>
-                            )}
+                            <View style={styles.statBox}>
+                                <Text style={styles.statNumber}>{longestStreak} week(s)</Text>
+                                <Text style={styles.statLabel}>Longest Streak</Text>
+                            </View>
                         </View>
-                    );
-                })}
+
+                        {/* Habit list (view-only) */}
+                        <Text style={styles.sectionTitle}>{displayName ? `${displayName}'s Habits` : 'Habits'}</Text>
+                        {habits.length === 0 && (
+                            <Text style={styles.emptyText}>No habits yet.</Text>
+                        )}
+                        {habits.map((habit) => {
+                            const commitment = habit.commitment ?? 1;
+                            const isNoCommitment = commitment === 0;
+                            const { current, max } = getWeekStreak(habit.completedDates || [], commitment);
+                            const totalDone = (habit.completedDates || []).length;
+
+                            return (
+                                <View key={habit.id} style={styles.habitCard}>
+                                    <View style={styles.habitHeader}>
+                                        <View style={styles.habitTitleRow}>
+                                            {habit.pinned && <Text style={styles.pinIcon}>📌 </Text>}
+                                            <Text style={styles.habitName}>{habit.name}</Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.weekRow}>
+                                        {weekDates.map((date, i) => {
+                                            const done = (habit.completedDates || []).includes(date);
+                                            return (
+                                                <View key={date} style={[styles.dayCircle, done && styles.dayCircleDone]}>
+                                                    <Text style={[styles.dayLabel, done && styles.dayLabelDone]}>{DAYS[i]}</Text>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+
+                                    {isNoCommitment ? (
+                                        <View style={styles.habitStatsRow}>
+                                            <Text style={styles.habitStat}>✨ Just do it (no goal)</Text>
+                                            <Text style={styles.habitStatRed}>🔥 {totalDone}x done total</Text>
+                                        </View>
+                                    ) : (
+                                        <View style={styles.habitStatsRow}>
+                                            <Text style={styles.habitStat}>🎯 {commitment}x/week</Text>
+                                            <Text style={styles.habitStatPurple}>🔥 {current} week(s) streak</Text>
+                                            <Text style={styles.habitStat}>🏆 Best: {max} week(s)</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            );
+                        })}
+                    </>
+                )}
 
                 <View style={{ height: 40 }} />
             </ScrollView>
@@ -340,6 +365,11 @@ const styles = StyleSheet.create({
     avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
     avatarText: { fontSize: 32, color: '#fff', fontWeight: 'bold' },
     name: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
+    lockBadge: { fontSize: 16 },
+    lockedBox: { alignItems: 'center', marginTop: 40, paddingHorizontal: 32, backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, paddingVertical: 32 },
+    lockedEmoji: { fontSize: 40, marginBottom: 12 },
+    lockedTitle: { fontSize: 17, fontWeight: 'bold', marginBottom: 6 },
+    lockedText: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20 },
     username: { fontSize: 15, color: '#888' },
     bio: { fontSize: 14, color: '#555', textAlign: 'center', marginTop: 8, paddingHorizontal: 32, lineHeight: 20 },
     followRow: { flexDirection: 'row', gap: 24, marginTop: 14 },

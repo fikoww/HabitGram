@@ -5,8 +5,8 @@ import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform,
-    ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform,
+  ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import { auth, db, storage } from '../firebaseConfig';
 
@@ -17,6 +17,7 @@ export default function EditProfileScreen() {
   const [originalUsername, setOriginalUsername] = useState('');
   const [bio, setBio] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
+  const [isPrivate, setIsPrivate] = useState(false);   // default: public
   const [newImageUri, setNewImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,6 +35,7 @@ export default function EditProfileScreen() {
         setOriginalUsername(data.username || '');
         setBio(data.bio || '');
         setPhotoUrl(data.photoUrl || '');
+        setIsPrivate(data.isPrivate === true);   // missing = public
       }
       setLoading(false);
     });
@@ -103,12 +105,13 @@ export default function EditProfileScreen() {
         }
       }
 
-      // Update Firestore with text fields (and photo if it uploaded)
+      // setDoc + merge: creates the doc if missing, updates if present.
       await setDoc(doc(db, 'users', userId), {
         displayName: displayName.trim(),
         username: username.trim().toLowerCase(),
         bio: bio.trim(),
         photoUrl: finalPhotoUrl,
+        isPrivate: isPrivate,
       }, { merge: true });
 
       if (photoFailed) {
@@ -121,7 +124,7 @@ export default function EditProfileScreen() {
         router.back();
       }
     } catch (e: any) {
-      setError('Failed to save. Please try again.');
+      setError('Failed to save: ' + (e.code || e.message));
     } finally {
       setSaving(false);
     }
@@ -209,6 +212,24 @@ export default function EditProfileScreen() {
           />
           <Text style={styles.charCount}>{bio.length}/150</Text>
 
+          {/* Private account toggle */}
+          <View style={styles.privacyRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.privacyTitle}>Private Account</Text>
+              <Text style={styles.privacyDesc}>
+                {isPrivate
+                  ? 'Only approved followers can see your habits.'
+                  : 'Anyone can follow you and see your habits.'}
+              </Text>
+            </View>
+            <Switch
+              value={isPrivate}
+              onValueChange={setIsPrivate}
+              trackColor={{ false: '#ccc', true: '#4CAF50' }}
+              thumbColor="#fff"
+            />
+          </View>
+
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
       </ScrollView>
@@ -238,5 +259,8 @@ const styles = StyleSheet.create({
   usernameInput: { flex: 1, padding: 14, fontSize: 15, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
   bioInput: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 14, fontSize: 15, backgroundColor: '#fafafa', minHeight: 80, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
   charCount: { fontSize: 12, color: '#aaa', textAlign: 'right', marginTop: 4 },
+  privacyRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f0f0f0', gap: 12 },
+  privacyTitle: { fontSize: 15, fontWeight: '600', color: '#333' },
+  privacyDesc: { fontSize: 12, color: '#888', marginTop: 4, lineHeight: 16 },
   errorText: { color: '#ff4444', fontSize: 13, marginTop: 12 },
 });
