@@ -4,6 +4,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { Text } from 'react-native';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -28,6 +29,13 @@ export default function TabLayout() {
           title: 'Explore',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
         }}
+      />
+      <Tabs.Screen
+        name="communities"
+        options={{
+          title: 'Communities',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>👥</Text>,
+       }}
       />
       <Tabs.Screen
         name="profile"
