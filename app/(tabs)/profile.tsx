@@ -270,8 +270,12 @@ export default function ProfileScreen() {
 
                     {/* Follower / following counts */}
                     <View style={styles.followRow}>
-                        <Text style={styles.followItem}><Text style={styles.followNum}>{followersCount}</Text> Followers</Text>
-                        <Text style={styles.followItem}><Text style={styles.followNum}>{followingCount}</Text> Following</Text>
+                        <TouchableOpacity onPress={() => router.push(`/user-list?userId=${auth.currentUser?.uid}&type=followers`)}>
+                            <Text style={styles.followItem}><Text style={styles.followNum}>{followersCount}</Text> Followers</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => router.push(`/user-list?userId=${auth.currentUser?.uid}&type=following`)}>
+                            <Text style={styles.followItem}><Text style={styles.followNum}>{followingCount}</Text> Following</Text>
+                        </TouchableOpacity>
                     </View>
 
                     {/* Follow Requests button */}
