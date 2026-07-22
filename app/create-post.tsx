@@ -1,14 +1,14 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { addDoc, arrayUnion, collection, doc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert, Image, KeyboardAvoidingView, Platform, ScrollView,
-  StyleSheet, Text, TextInput, TouchableOpacity, View
+    ActivityIndicator,
+    Alert, Image, KeyboardAvoidingView, Platform, ScrollView,
+    StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-import { auth, db, storage } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
+import { uploadImageToCloudinary } from '../cloudinaryConfig';
 
 type Habit = { id: string; name: string };
 
@@ -83,17 +83,6 @@ export default function CreatePostScreen() {
     if (!result.canceled) setImageUri(result.assets[0].uri);
   };
 
-  const uploadImageToStorage = async (uri: string, userId: string): Promise<string> => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const filename = `posts/${userId}/${Date.now()}.jpg`;
-    const storageRef = ref(storage, filename);
-    const uploadPromise = uploadBytes(storageRef, blob).then(() => getDownloadURL(storageRef));
-    const timeoutPromise = new Promise<string>((_, reject) =>
-      setTimeout(() => reject(new Error('Upload timed out')), 15000)
-    );
-    return await Promise.race([uploadPromise, timeoutPromise]);
-  };
 
   // ---- Mini calendar navigation ----
   const goPrevMonth = () => {
@@ -148,7 +137,7 @@ export default function CreatePostScreen() {
       let imageUrl = '';
       if (imageUri) {
         try {
-          imageUrl = await uploadImageToStorage(imageUri, user.uid);
+          imageUrl = await uploadImageToCloudinary(imageUri);
         } catch (uploadErr) {
           photoFailed = true;
           imageUrl = '';

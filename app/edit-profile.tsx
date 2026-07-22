@@ -1,14 +1,14 @@
-import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform,
   ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-import { auth, db, storage } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
+import { uploadImageToCloudinary } from '../cloudinaryConfig';
 
 export default function EditProfileScreen() {
   const [userId, setUserId] = useState('');
@@ -57,13 +57,6 @@ export default function EditProfileScreen() {
     if (!result.canceled) setNewImageUri(result.assets[0].uri);
   };
 
-  const uploadImage = async (uri: string, uid: string): Promise<string> => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const storageRef = ref(storage, `avatars/${uid}/${Date.now()}.jpg`);
-    await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
-  };
 
   const handleSave = async () => {
     setError('');
@@ -98,7 +91,7 @@ export default function EditProfileScreen() {
       let photoFailed = false;
       if (newImageUri) {
         try {
-          finalPhotoUrl = await uploadImage(newImageUri, userId);
+          finalPhotoUrl = await uploadImageToCloudinary(newImageUri);
         } catch (uploadErr) {
           photoFailed = true;
           finalPhotoUrl = photoUrl; // fall back to existing photo
@@ -117,7 +110,7 @@ export default function EditProfileScreen() {
       if (photoFailed) {
         Alert.alert(
           'Saved (without photo)',
-          'Your profile was saved, but the photo could not be uploaded on web. Try uploading the photo from the mobile app.',
+          'Your profile was saved, but the photo could not be uploaded. Please check your connection and try again.',
           [{ text: 'OK', onPress: () => router.back() }]
         );
       } else {
