@@ -43,6 +43,7 @@ export default function LoginScreen() {
       <Text style={styles.subtitle}>Sign in to continue</Text>
 
       <View style={styles.card}>
+        <Text style={styles.label}>Email</Text>        
         <TextInput
           style={[styles.input, error ? styles.inputError : null]}
           placeholder="Email"
@@ -51,6 +52,7 @@ export default function LoginScreen() {
           keyboardType="email-address"
           autoCapitalize="none"
         />
+        <Text style={styles.label}>Password</Text>   
         <View style={[styles.passwordContainer, error ? styles.inputError : null]}>
           <TextInput
             style={styles.passwordInput}
@@ -91,6 +93,7 @@ const styles = StyleSheet.create({
           borderRadius: 16, padding: 24, shadowColor: '#000000', 
           shadowOffset: { width: 4, height: 4 }, shadowOpacity: 0.08, 
           shadowRadius: 12, elevation: 4},
+  label: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 6 },
   input: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, 
            padding: 14, marginBottom: 12, fontSize: 15, backgroundColor: '#fafafa', ...(Platform.OS === 'web' && { outlineStyle: 'none' as any })},
   inputError: { borderColor: '#ff4444', borderWidth: 1.5},
