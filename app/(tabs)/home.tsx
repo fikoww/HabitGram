@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   commentUser: { fontWeight: 'normal', color: '#888' },
   commentText: { fontSize: 14, color: '#333', marginTop: 2 },
   noComments: { textAlign: 'center', color: '#aaa', padding: 32 },
-  commentInputRow: { flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: '#eee', gap: 8 },
+  commentInputRow: { flexDirection: 'row', padding: 12, paddingBottom: 36, borderTopWidth: 1, borderTopColor: '#eee', gap: 8 },
   commentInput: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, fontSize: 14, maxHeight: 80 },
   commentSendBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, justifyContent: 'center' },
   commentSendText: { color: '#fff', fontWeight: 'bold' },
