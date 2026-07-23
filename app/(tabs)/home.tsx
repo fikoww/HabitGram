@@ -284,17 +284,27 @@ export default function HomeScreen() {
               data={comments}
               keyExtractor={(item) => item.id}
               style={{ flex: 1 }}
-              renderItem={({ item }) => (
-                <View style={styles.commentItem}>
+              renderItem={({ item }) => {
+                const openProfile = () => {
+                  setCommentModal(false);
+                  router.push(`/user-profile?id=${item.userId}`);
+                };
+                return (
+                  <View style={styles.commentItem}>
+                    <TouchableOpacity onPress={openProfile}>
                   <View style={styles.commentAvatar}>
-                    <Text style={styles.commentAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
+                  <Text style={styles.commentAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
                   </View>
-                  <View style={styles.commentContent}>
-                    <Text style={styles.commentName}>{item.displayName} <Text style={styles.commentUser}>@{item.username}</Text></Text>
-                    <Text style={styles.commentText}>{item.text}</Text>
+                    </TouchableOpacity>
+                    <View style={styles.commentContent}>
+                      <Text style={styles.commentName} onPress={openProfile}>
+                        {item.displayName} <Text style={styles.commentUser}>@{item.username}</Text>
+                      </Text>
+                      <Text style={styles.commentText}>{item.text}</Text>
+                    </View>
                   </View>
-                </View>
-              )}
+                );
+              }}
               ListEmptyComponent={<Text style={styles.noComments}>No comments yet. Be the first!</Text>}
             />
 
