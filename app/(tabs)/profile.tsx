@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Dimensions, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
 type Habit = {
@@ -27,9 +27,6 @@ type Post = {
     completedDate?: string;
     createdAt?: any;
 };
-
-// 3 columns with 2px gaps
-const GRID_SIZE = (Dimensions.get('window').width - 4) / 3;
 
 const getWeekDates = () => {
     const today = new Date();
@@ -124,6 +121,10 @@ export default function ProfileScreen() {
     const [pendingCount, setPendingCount] = useState(0);
 
     const weekDates = getWeekDates();
+
+    // 3 columns: subtract the two 2px gaps, floor to avoid sub-pixel wrapping
+    const { width: winWidth } = useWindowDimensions();
+    const gridSize = Math.floor((winWidth - 4) / 3);
 
     useEffect(() => {
         let unsubscribeHabits: (() => void) | undefined;
@@ -365,7 +366,7 @@ export default function ProfileScreen() {
                     ) : (
                         <View style={styles.grid}>
                             {posts.map((p) => (
-                                <TouchableOpacity key={p.id} style={styles.gridItem} onPress={() => setSelectedPost(p)}>
+                                <TouchableOpacity key={p.id} style={[styles.gridItem, { width: gridSize, height: gridSize }]} onPress={() => setSelectedPost(p)}>
                                     {p.imageUrl ? (
                                         <Image source={{ uri: p.imageUrl }} style={styles.gridImage} />
                                     ) : (
@@ -677,8 +678,8 @@ const styles = StyleSheet.create({
     tabText: { fontSize: 14, color: '#888', fontWeight: '600' },
     tabTextActive: { color: '#4CAF50' },
     addHabitRow: { alignItems: 'flex-end', paddingHorizontal: 16, marginTop: 16, marginBottom: 12 },
-    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, padding: 1 },
-    gridItem: { width: GRID_SIZE, height: GRID_SIZE },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2 },
+    gridItem: { overflow: 'hidden' },
     gridImage: { width: '100%', height: '100%' },
     gridNoImage: { width: '100%', height: '100%', backgroundColor: '#f0f7f0', justifyContent: 'center', alignItems: 'center', padding: 6 },
     gridNoImageEmoji: { fontSize: 22, marginBottom: 4 },
