@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
 type Habit = {
@@ -15,6 +15,21 @@ type Habit = {
 };
 
 type HabitListItem = { id: string; name: string; category: string };
+
+type Post = {
+    id: string;
+    userId: string;
+    habitName?: string;
+    caption?: string;
+    imageUrl?: string;
+    likes?: string[];
+    commentCount?: number;
+    completedDate?: string;
+    createdAt?: any;
+};
+
+// 3 columns with 2px gaps
+const GRID_SIZE = (Dimensions.get('window').width - 4) / 3;
 
 const getWeekDates = () => {
     const today = new Date();
@@ -98,6 +113,11 @@ export default function ProfileScreen() {
     const [newHabitCommitment, setNewHabitCommitment] = useState(1);
     const [addError, setAddError] = useState('');
 
+    // Posts grid
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [activeTab, setActiveTab] = useState<'habits' | 'posts'>('habits');
+    const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+
     // Follow counts
     const [followersCount, setFollowersCount] = useState(0);
     const [followingCount, setFollowingCount] = useState(0);
@@ -141,6 +161,13 @@ export default function ProfileScreen() {
             unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followers'), (s) => setFollowersCount(s.size)));
             unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'following'), (s) => setFollowingCount(s.size)));
             unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followRequests'), (s) => setPendingCount(s.size)));
+            // My posts (sorted client-side to avoid needing a composite index)
+            const pq = query(collection(db, 'posts'), where('userId', '==', user.uid));
+            unsubs.push(onSnapshot(pq, (snap) => {
+                const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
+                list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                setPosts(list);
+            }));
         });
         return () => { unsubAuth(); unsubs.forEach((u) => u()); };
     }, []);
@@ -308,20 +335,66 @@ export default function ProfileScreen() {
                     </View>
                 </View>
 
-                {/* Section header with Add Habit button */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>My Habits</Text>
+                {/* Tab switcher: Habits | Posts */}
+                <View style={styles.tabRow}>
+                    <TouchableOpacity
+                        style={[styles.tabBtn, activeTab === 'habits' && styles.tabBtnActive]}
+                        onPress={() => setActiveTab('habits')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'habits' && styles.tabTextActive]}>
+                            🎯 Habits
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.tabBtn, activeTab === 'posts' && styles.tabBtnActive]}
+                        onPress={() => setActiveTab('posts')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'posts' && styles.tabTextActive]}>
+                            ▦ Posts {posts.length > 0 ? `(${posts.length})` : ''}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* ---------- POSTS GRID ---------- */}
+                {activeTab === 'posts' && (
+                    posts.length === 0 ? (
+                        <View style={styles.gridEmpty}>
+                            <Text style={styles.gridEmptyEmoji}>📷</Text>
+                            <Text style={styles.emptyText}>No posts yet.{'\n'}Share your first habit post!</Text>
+                        </View>
+                    ) : (
+                        <View style={styles.grid}>
+                            {posts.map((p) => (
+                                <TouchableOpacity key={p.id} style={styles.gridItem} onPress={() => setSelectedPost(p)}>
+                                    {p.imageUrl ? (
+                                        <Image source={{ uri: p.imageUrl }} style={styles.gridImage} />
+                                    ) : (
+                                        <View style={styles.gridNoImage}>
+                                            <Text style={styles.gridNoImageEmoji}>📝</Text>
+                                            <Text style={styles.gridNoImageText} numberOfLines={2}>{p.habitName}</Text>
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )
+                )}
+
+                {/* ---------- HABITS LIST ---------- */}
+                {activeTab === 'habits' && (
+                <View style={styles.addHabitRow}>
                     <TouchableOpacity style={styles.addHabitButton} onPress={openAddHabit}>
                         <Text style={styles.addHabitButtonText}>+ Add Habit</Text>
                     </TouchableOpacity>
                 </View>
+                )}
 
-                {habits.length === 0 && (
+                {activeTab === 'habits' && habits.length === 0 && (
                     <Text style={styles.emptyText}>No habits yet. Tap "+ Add Habit" to start!</Text>
                 )}
 
                 {/* Habit list */}
-                {habits.map((habit) => {
+                {activeTab === 'habits' && habits.map((habit) => {
                     const commitment = habit.commitment ?? 1;
                     const isNoCommitment = commitment === 0;
                     const { current, max } = getWeekStreak(habit.completedDates || [], commitment);
@@ -410,6 +483,41 @@ export default function ProfileScreen() {
                     </View>
                 </TouchableOpacity>
             )}
+
+            {/* Post detail modal */}
+            <Modal visible={!!selectedPost} animationType="slide" transparent onRequestClose={() => setSelectedPost(null)}>
+                <View style={styles.postModalOverlay}>
+                    <View style={styles.postModalBox}>
+                        <View style={styles.postModalHeader}>
+                            <Text style={styles.postModalHabit}>🔥 {selectedPost?.habitName}</Text>
+                            <TouchableOpacity onPress={() => setSelectedPost(null)}>
+                                <Text style={styles.postModalClose}>✕</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView>
+                            {selectedPost?.imageUrl ? (
+                                <Image source={{ uri: selectedPost.imageUrl }} style={styles.postModalImage} resizeMode="cover" />
+                            ) : null}
+
+                            <View style={styles.postModalBody}>
+                                {selectedPost?.completedDate ? (
+                                    <Text style={styles.postModalDate}>📅 {selectedPost.completedDate}</Text>
+                                ) : null}
+                                {selectedPost?.caption ? (
+                                    <Text style={styles.postModalCaption}>{selectedPost.caption}</Text>
+                                ) : (
+                                    <Text style={styles.postModalNoCaption}>No caption</Text>
+                                )}
+                                <View style={styles.postModalStats}>
+                                    <Text style={styles.postModalStat}>❤️ {(selectedPost?.likes || []).length}</Text>
+                                    <Text style={styles.postModalStat}>💬 {selectedPost?.commentCount || 0}</Text>
+                                </View>
+                            </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Add Habit Modal */}
             <Modal visible={addHabitVisible} animationType="fade" transparent onRequestClose={closeAddHabit}>
@@ -563,6 +671,32 @@ const styles = StyleSheet.create({
     statNumber: { fontSize: 18, fontWeight: 'bold', color: '#4CAF50', textAlign: 'center' },
     statLabel: { fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center' },
     sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 12, paddingHorizontal: 16 },
+    tabRow: { flexDirection: 'row', backgroundColor: '#fff', marginTop: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+    tabBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+    tabBtnActive: { borderBottomColor: '#4CAF50' },
+    tabText: { fontSize: 14, color: '#888', fontWeight: '600' },
+    tabTextActive: { color: '#4CAF50' },
+    addHabitRow: { alignItems: 'flex-end', paddingHorizontal: 16, marginTop: 16, marginBottom: 12 },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, padding: 1 },
+    gridItem: { width: GRID_SIZE, height: GRID_SIZE },
+    gridImage: { width: '100%', height: '100%' },
+    gridNoImage: { width: '100%', height: '100%', backgroundColor: '#f0f7f0', justifyContent: 'center', alignItems: 'center', padding: 6 },
+    gridNoImageEmoji: { fontSize: 22, marginBottom: 4 },
+    gridNoImageText: { fontSize: 10, color: '#4CAF50', textAlign: 'center', fontWeight: '600' },
+    gridEmpty: { alignItems: 'center', paddingVertical: 40 },
+    gridEmptyEmoji: { fontSize: 40, marginBottom: 10 },
+    postModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
+    postModalBox: { backgroundColor: '#fff', borderRadius: 16, maxHeight: '85%', overflow: 'hidden' },
+    postModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
+    postModalHabit: { fontSize: 15, fontWeight: 'bold', color: '#4CAF50' },
+    postModalClose: { fontSize: 18, color: '#888' },
+    postModalImage: { width: '100%', height: 320 },
+    postModalBody: { padding: 16 },
+    postModalDate: { fontSize: 12, color: '#888', marginBottom: 8 },
+    postModalCaption: { fontSize: 15, color: '#333', lineHeight: 22 },
+    postModalNoCaption: { fontSize: 14, color: '#bbb', fontStyle: 'italic' },
+    postModalStats: { flexDirection: 'row', gap: 16, marginTop: 16 },
+    postModalStat: { fontSize: 14, color: '#666' },
     sectionTitle: { fontSize: 18, fontWeight: 'bold' },
     addHabitButton: { backgroundColor: '#4CAF50', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8 },
     addHabitButtonText: { color: '#fff', fontWeight: '600', fontSize: 13 },
