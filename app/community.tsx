@@ -1,8 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
-import { arrayRemove, arrayUnion, collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+    addDoc, arrayRemove, arrayUnion, collection, doc, getDoc,
+    limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where
+} from 'firebase/firestore';
+import { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator, Image, KeyboardAvoidingView, Platform,
+    ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View
+} from 'react-native';
 import { auth, db } from '../firebaseConfig';
 
 type Post = {
@@ -19,39 +25,105 @@ type Post = {
     createdAt?: any;
 };
 
+type Message = {
+    id: string;
+    text: string;
+    senderId: string;
+    senderName?: string;
+    senderUsername?: string;
+    createdAt?: any;
+};
+
 export default function CommunityScreen() {
     const { name } = useLocalSearchParams<{ name: string }>();
     const [myId, setMyId] = useState('');
+    const [myName, setMyName] = useState('');
+    const [myUsername, setMyUsername] = useState('');
+
+    const [tab, setTab] = useState<'posts' | 'chat'>('posts');
     const [posts, setPosts] = useState<Post[]>([]);
     const [memberCount, setMemberCount] = useState(0);
+    const [isMember, setIsMember] = useState(false);
+    const [membersLoaded, setMembersLoaded] = useState(false);
     const [loading, setLoading] = useState(true);
 
+    // Chat
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [draft, setDraft] = useState('');
+    const [sending, setSending] = useState(false);
+    const scrollRef = useRef<ScrollView>(null);
+
     useEffect(() => {
-        const unsub = onAuthStateChanged(auth, (u) => { if (u) setMyId(u.uid); });
+        const unsub = onAuthStateChanged(auth, async (u) => {
+            if (!u) return;
+            setMyId(u.uid);
+            const me = await getDoc(doc(db, 'users', u.uid));
+            if (me.exists()) {
+                setMyName(me.data().displayName || '');
+                setMyUsername(me.data().username || '');
+            }
+        });
         return () => unsub();
     }, []);
 
     useEffect(() => {
         if (!name) return;
-        // Posts in this community (filter by habit name).
-        // We sort client-side by createdAt to avoid needing a composite index.
-        const q = query(collection(db, 'posts'), where('habitName', '==', name));
-        const unsubPosts = onSnapshot(q, (snap) => {
+
+        // Posts in this community (sorted client-side to avoid a composite index)
+        const pq = query(collection(db, 'posts'), where('habitName', '==', name));
+        const unsubPosts = onSnapshot(pq, (snap) => {
             const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
             list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             setPosts(list);
             setLoading(false);
         }, () => setLoading(false));
 
-        // Member count = unique users who have this habit
+        // Members = unique users who have this habit
         const mq = query(collection(db, 'habits'), where('name', '==', name));
         const unsubMembers = onSnapshot(mq, (snap) => {
             const uids = new Set(snap.docs.map((d) => d.data().userId));
             setMemberCount(uids.size);
+            setIsMember(uids.has(auth.currentUser?.uid || ''));
+            setMembersLoaded(true);
         });
 
         return () => { unsubPosts(); unsubMembers(); };
+    }, [name, myId]);
+
+    // Chat messages: take the 50 newest, then flip to chronological order
+    useEffect(() => {
+        if (!name) return;
+        const q = query(
+            collection(db, 'communityChats', name, 'messages'),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+        );
+        const unsub = onSnapshot(q, (snap) => {
+            const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Message, 'id'>) }));
+            setMessages(list.reverse());
+        });
+        return () => unsub();
     }, [name]);
+
+    const sendMessage = async () => {
+        const text = draft.trim();
+        if (!text || !myId || !name) return;
+        setSending(true);
+        setDraft('');
+        try {
+            await addDoc(collection(db, 'communityChats', name, 'messages'), {
+                text,
+                senderId: myId,
+                senderName: myName,
+                senderUsername: myUsername,
+                createdAt: serverTimestamp(),
+            });
+        } catch (e) {
+            setDraft(text); // put it back so nothing is lost
+        } finally {
+            setSending(false);
+        }
+    };
 
     const toggleLike = async (post: Post) => {
         if (!myId) return;
@@ -61,72 +133,176 @@ export default function CommunityScreen() {
         });
     };
 
+    const formatTime = (ts: any) => {
+        if (!ts?.seconds) return '';
+        const d = new Date(ts.seconds * 1000);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    };
+
     return (
-        <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={{ width: 50 }}>
-                    <Text style={styles.backText}>← Back</Text>
-                </TouchableOpacity>
-                <View style={{ alignItems: 'center' }}>
-                    <Text style={styles.headerTitle}>{name}</Text>
-                    <Text style={styles.headerSub}>{memberCount} member{memberCount === 1 ? '' : 's'}</Text>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={styles.container}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()} style={{ width: 50 }}>
+                        <Text style={styles.backText}>← Back</Text>
+                    </TouchableOpacity>
+                    <View style={{ alignItems: 'center' }}>
+                        <Text style={styles.headerTitle}>{name}</Text>
+                        <Text style={styles.headerSub}>{memberCount} member{memberCount === 1 ? '' : 's'}</Text>
+                    </View>
+                    <View style={{ width: 50 }} />
                 </View>
-                <View style={{ width: 50 }} />
-            </View>
 
-            {loading ? (
-                <ActivityIndicator style={{ marginTop: 32 }} color="#4CAF50" />
-            ) : posts.length === 0 ? (
-                <View style={styles.emptyBox}>
-                    <Text style={styles.emptyEmoji}>🌱</Text>
-                    <Text style={styles.emptyText}>No posts in this community yet.{'\n'}Be the first to post about {name}!</Text>
+                {/* Tabs */}
+                <View style={styles.tabRow}>
+                    <TouchableOpacity
+                        style={[styles.tabBtn, tab === 'posts' && styles.tabBtnActive]}
+                        onPress={() => setTab('posts')}
+                    >
+                        <Text style={[styles.tabText, tab === 'posts' && styles.tabTextActive]}>
+                            ▦ Posts {posts.length > 0 ? `(${posts.length})` : ''}
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.tabBtn, tab === 'chat' && styles.tabBtnActive]}
+                        onPress={() => setTab('chat')}
+                    >
+                        <Text style={[styles.tabText, tab === 'chat' && styles.tabTextActive]}>
+                            💬 Chat
+                        </Text>
+                    </TouchableOpacity>
                 </View>
-            ) : (
-                <ScrollView>
-                    {posts.map((p) => {
-                        const liked = (p.likes || []).includes(myId);
-                        return (
-                            <View key={p.id} style={styles.post}>
-                                <TouchableOpacity style={styles.postHeader} onPress={() => router.push(`/user-profile?id=${p.userId}`)}>
-                                    <View style={styles.avatar}>
-                                        <Text style={styles.avatarText}>{p.displayName?.[0]?.toUpperCase() || '?'}</Text>
-                                    </View>
-                                    <View>
-                                        <Text style={styles.postName}>{p.displayName || 'Unnamed'}</Text>
-                                        <Text style={styles.postUsername}>@{p.username}</Text>
-                                    </View>
-                                </TouchableOpacity>
 
-                                {p.imageUrl ? (
-                                    <Image source={{ uri: p.imageUrl }} style={styles.postImage} />
-                                ) : (
-                                    <View style={styles.postImagePlaceholder}>
-                                        <Text style={{ fontSize: 40 }}>📷</Text>
-                                    </View>
-                                )}
-
-                                <View style={styles.postBody}>
-                                    <View style={styles.actionsRow}>
-                                        <TouchableOpacity onPress={() => toggleLike(p)}>
-                                            <Text style={styles.likeIcon}>{liked ? '❤️' : '🤍'}</Text>
+                {/* ---------------- POSTS ---------------- */}
+                {tab === 'posts' && (
+                    loading ? (
+                        <ActivityIndicator style={{ marginTop: 32 }} color="#4CAF50" />
+                    ) : posts.length === 0 ? (
+                        <View style={styles.emptyBox}>
+                            <Text style={styles.emptyEmoji}>🌱</Text>
+                            <Text style={styles.emptyText}>No posts in this community yet.{'\n'}Be the first to post about {name}!</Text>
+                        </View>
+                    ) : (
+                        <ScrollView>
+                            {posts.map((p) => {
+                                const liked = (p.likes || []).includes(myId);
+                                return (
+                                    <View key={p.id} style={styles.post}>
+                                        <TouchableOpacity style={styles.postHeader} onPress={() => router.push(`/user-profile?id=${p.userId}`)}>
+                                            <View style={styles.avatar}>
+                                                <Text style={styles.avatarText}>{p.displayName?.[0]?.toUpperCase() || '?'}</Text>
+                                            </View>
+                                            <View>
+                                                <Text style={styles.postName}>{p.displayName || 'Unnamed'}</Text>
+                                                <Text style={styles.postUsername}>@{p.username}</Text>
+                                            </View>
                                         </TouchableOpacity>
-                                        <Text style={styles.likeCount}>{(p.likes || []).length}</Text>
-                                        <Text style={styles.commentCount}>💬 {p.commentCount || 0}</Text>
+
+                                        {p.imageUrl ? (
+                                            <Image source={{ uri: p.imageUrl }} style={styles.postImage} />
+                                        ) : (
+                                            <View style={styles.postImagePlaceholder}>
+                                                <Text style={{ fontSize: 40 }}>📷</Text>
+                                            </View>
+                                        )}
+
+                                        <View style={styles.postBody}>
+                                            <View style={styles.actionsRow}>
+                                                <TouchableOpacity onPress={() => toggleLike(p)}>
+                                                    <Text style={styles.likeIcon}>{liked ? '❤️' : '🤍'}</Text>
+                                                </TouchableOpacity>
+                                                <Text style={styles.likeCount}>{(p.likes || []).length}</Text>
+                                                <Text style={styles.commentCount}>💬 {p.commentCount || 0}</Text>
+                                            </View>
+                                            {p.caption ? (
+                                                <Text style={styles.caption}>
+                                                    <Text style={styles.captionName}>{p.username} </Text>{p.caption}
+                                                </Text>
+                                            ) : null}
+                                        </View>
                                     </View>
-                                    {p.caption ? (
-                                        <Text style={styles.caption}>
-                                            <Text style={styles.captionName}>{p.username} </Text>{p.caption}
-                                        </Text>
-                                    ) : null}
+                                );
+                            })}
+                            <View style={{ height: 40 }} />
+                        </ScrollView>
+                    )
+                )}
+
+                {/* ---------------- CHAT ---------------- */}
+                {/* Chat is members-only: you must have this habit to read or write. */}
+                {tab === 'chat' && !membersLoaded && (
+                    <ActivityIndicator style={{ marginTop: 32 }} color="#4CAF50" />
+                )}
+
+                {tab === 'chat' && membersLoaded && !isMember && (
+                    <View style={styles.lockedBox}>
+                        <Text style={styles.lockedEmoji}>🔒</Text>
+                        <Text style={styles.lockedTitle}>Members only</Text>
+                        <Text style={styles.lockedText}>
+                            Add <Text style={{ fontWeight: 'bold' }}>{name}</Text> to your habits to see and join this conversation.
+                        </Text>
+                        <TouchableOpacity style={styles.joinBtn} onPress={() => router.push('/(tabs)/profile')}>
+                            <Text style={styles.joinBtnText}>Go to My Habits</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {tab === 'chat' && membersLoaded && isMember && (
+                    <>
+                        <ScrollView
+                            ref={scrollRef}
+                            style={styles.chatScroll}
+                            contentContainerStyle={{ padding: 12, paddingBottom: 20 }}
+                            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+                        >
+                            {messages.length === 0 ? (
+                                <View style={styles.emptyBox}>
+                                    <Text style={styles.emptyEmoji}>💬</Text>
+                                    <Text style={styles.emptyText}>No messages yet.{'\n'}Say hi to the {name} community!</Text>
                                 </View>
-                            </View>
-                        );
-                    })}
-                    <View style={{ height: 40 }} />
-                </ScrollView>
-            )}
-        </View>
+                            ) : (
+                                messages.map((m) => {
+                                    const mine = m.senderId === myId;
+                                    return (
+                                        <View key={m.id} style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
+                                            <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
+                                                {!mine && (
+                                                    <Text style={styles.senderName} onPress={() => router.push(`/user-profile?id=${m.senderId}`)}>
+                                                        {m.senderName || 'Unnamed'}
+                                                    </Text>
+                                                )}
+                                                <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{m.text}</Text>
+                                                <Text style={[styles.bubbleTime, mine && styles.bubbleTimeMine]}>{formatTime(m.createdAt)}</Text>
+                                            </View>
+                                        </View>
+                                    );
+                                })
+                            )}
+                        </ScrollView>
+
+                        {/* Input */}
+                        <View style={styles.inputRow}>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder={`Message ${name}...`}
+                                    placeholderTextColor="#aaa"
+                                    value={draft}
+                                    onChangeText={setDraft}
+                                    multiline
+                                />
+                            <TouchableOpacity
+                                style={[styles.sendBtn, (!draft.trim() || sending) && styles.sendBtnDisabled]}
+                                onPress={sendMessage}
+                                disabled={!draft.trim() || sending}
+                            >
+                                <Text style={styles.sendText}>Send</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </>
+                )}
+            </View>
+        </KeyboardAvoidingView>
     );
 }
 
@@ -136,9 +312,15 @@ const styles = StyleSheet.create({
     backText: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
     headerTitle: { fontSize: 18, fontWeight: 'bold' },
     headerSub: { fontSize: 12, color: '#888', marginTop: 2 },
-    emptyBox: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32 },
+    tabRow: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
+    tabBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+    tabBtnActive: { borderBottomColor: '#4CAF50' },
+    tabText: { fontSize: 14, color: '#888', fontWeight: '600' },
+    tabTextActive: { color: '#4CAF50' },
+    emptyBox: { alignItems: 'center', marginTop: 60, paddingHorizontal: 32 },
     emptyEmoji: { fontSize: 44, marginBottom: 12 },
     emptyText: { fontSize: 15, color: '#888', textAlign: 'center', lineHeight: 22 },
+    // Posts
     post: { backgroundColor: '#fff', marginTop: 8, paddingBottom: 8 },
     postHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10 },
     avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
@@ -154,4 +336,27 @@ const styles = StyleSheet.create({
     commentCount: { fontSize: 13, color: '#888', marginLeft: 8 },
     caption: { fontSize: 14, color: '#333', lineHeight: 20 },
     captionName: { fontWeight: '600' },
+    // Chat
+    chatScroll: { flex: 1 },
+    bubbleRow: { flexDirection: 'row', marginBottom: 10 },
+    bubbleRowMine: { justifyContent: 'flex-end' },
+    bubble: { maxWidth: '78%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8 },
+    bubbleOther: { backgroundColor: '#fff', borderTopLeftRadius: 4 },
+    bubbleMine: { backgroundColor: '#4CAF50', borderTopRightRadius: 4 },
+    senderName: { fontSize: 12, fontWeight: 'bold', color: '#4CAF50', marginBottom: 3 },
+    bubbleText: { fontSize: 15, color: '#333', lineHeight: 20 },
+    bubbleTextMine: { color: '#fff' },
+    bubbleTime: { fontSize: 10, color: '#aaa', marginTop: 4, alignSelf: 'flex-end' },
+    bubbleTimeMine: { color: 'rgba(255,255,255,0.75)' },
+    inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 12, paddingBottom: 36, gap: 8, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
+    input: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, backgroundColor: '#fafafa', maxHeight: 100, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
+    sendBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20 },
+    sendBtnDisabled: { backgroundColor: '#a5d6a7' },
+    sendText: { color: '#fff', fontWeight: 'bold' },
+    lockedBox: { alignItems: 'center', marginTop: 60, marginHorizontal: 24, backgroundColor: '#fff', borderRadius: 12, padding: 28 },
+    lockedEmoji: { fontSize: 40, marginBottom: 12 },
+    lockedTitle: { fontSize: 17, fontWeight: 'bold', marginBottom: 8 },
+    lockedText: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, marginBottom: 16 },
+    joinBtn: { borderWidth: 1, borderColor: '#4CAF50', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 },
+    joinBtnText: { color: '#4CAF50', fontWeight: '600', fontSize: 13 },
 });
