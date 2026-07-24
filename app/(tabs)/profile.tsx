@@ -112,7 +112,7 @@ export default function ProfileScreen() {
 
     // Posts grid
     const [posts, setPosts] = useState<Post[]>([]);
-    const [activeTab, setActiveTab] = useState<'habits' | 'posts'>('habits');
+    const [activeTab, setActiveTab] = useState<'posts' | 'habits'>('posts');
     const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
     // Follow counts
@@ -339,19 +339,19 @@ export default function ProfileScreen() {
                 {/* Tab switcher: Habits | Posts */}
                 <View style={styles.tabRow}>
                     <TouchableOpacity
-                        style={[styles.tabBtn, activeTab === 'habits' && styles.tabBtnActive]}
-                        onPress={() => setActiveTab('habits')}
-                    >
-                        <Text style={[styles.tabText, activeTab === 'habits' && styles.tabTextActive]}>
-                            🎯 Habits
-                        </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
                         style={[styles.tabBtn, activeTab === 'posts' && styles.tabBtnActive]}
                         onPress={() => setActiveTab('posts')}
                     >
                         <Text style={[styles.tabText, activeTab === 'posts' && styles.tabTextActive]}>
                             ▦ Posts {posts.length > 0 ? `(${posts.length})` : ''}
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.tabBtn, activeTab === 'habits' && styles.tabBtnActive]}
+                        onPress={() => setActiveTab('habits')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'habits' && styles.tabTextActive]}>
+                            🎯 Habits
                         </Text>
                     </TouchableOpacity>
                 </View>
