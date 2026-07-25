@@ -433,14 +433,24 @@ export default function ProfileScreen() {
                         <TouchableOpacity
                             key={habit.id}
                             style={[styles.habitCard, habit.pinned && styles.habitPinned, commitmentMet && styles.habitCardDone]}
-                            onPress={() => router.push(`/habit-detail?id=${habit.id}`)}
+                            onPress={() => {
+                                if (habitMenuId !== null) {
+                                    setHabitMenuId(null);
+                                    return;
+                                }
+                                router.push(`/habit-detail?id=${habit.id}`);
+                            }}
                         >
                             <View style={styles.habitHeader}>
                                 <View style={styles.habitTitleRow}>
                                     {habit.pinned && <Text style={styles.pinIcon}>📌 </Text>}
                                     <Text style={styles.habitName}>{habit.name}</Text>
                                 </View>
-                                <TouchableOpacity onPress={(e) => { e.stopPropagation(); setHabitMenuId(habitMenuId === habit.id ? null : habit.id); }}>
+                                <TouchableOpacity
+                                    style={styles.habitMenuButton}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                    onPress={(e) => { e.stopPropagation(); setHabitMenuId(habitMenuId === habit.id ? null : habit.id); }}
+                                >
                                     <Text style={styles.habitMenuDots}>⋮</Text>
                                 </TouchableOpacity>
                             </View>
@@ -494,6 +504,13 @@ export default function ProfileScreen() {
                 })}
 
                 <View style={{ height: 40 }} />
+                {habitMenuId !== null && (
+                    <TouchableOpacity
+                        style={styles.menuBackdrop}
+                        activeOpacity={1}
+                        onPress={() => setHabitMenuId(null)}
+                    />
+                )}
             </ScrollView>
 
             {/* Profile dropdown menu */}
@@ -592,7 +609,7 @@ export default function ProfileScreen() {
 
                                 {selectedAddHabitName ? (
                                     <>
-                                        <Text style={styles.modalLabel}>How often?</Text>
+                                        <Text style={styles.modalLabel}>How often per week?</Text>
                                         <View style={styles.commitmentRow}>
                                             <TouchableOpacity
                                                 style={[styles.commitmentChipWide, newHabitCommitment === 0 && styles.commitmentChipActive]}
@@ -744,6 +761,7 @@ const styles = StyleSheet.create({
     habitTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     pinIcon: { fontSize: 14 },
     habitName: { fontSize: 16, fontWeight: '600' },
+    habitMenuButton: { padding: 10, marginRight: -10 },
     habitMenuDots: { fontSize: 20, color: '#888', paddingHorizontal: 4 },
     habitPopout: { position: 'absolute', top: 40, right: 16, backgroundColor: '#fff', borderRadius: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, minWidth: 160, zIndex: 99 },
     habitMenuItem: { padding: 10 },
@@ -765,6 +783,7 @@ const styles = StyleSheet.create({
     commitmentOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
     commitmentBox: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 },
     addHabitBox: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '85%' },
+    menuBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 },
     commitmentTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' },
     commitmentSubtitle: { fontSize: 15, color: '#888', marginBottom: 16, textAlign: 'center' },
     modalLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8 },
