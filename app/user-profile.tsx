@@ -240,6 +240,16 @@ export default function UserProfileScreen() {
     }, habits[0]);
     const longestStreak = mostConsistent ? getWeekStreak(mostConsistent.completedDates || [], mostConsistent.commitment ?? 1).max : 0;
 
+    // Top 3 current streaks for the streak row (fire is lit at >= 3 weeks)
+    const topStreaks = habits
+        .map((h) => {
+            const weeks = getWeekStreak(h.completedDates || [], h.commitment ?? 1).current;
+            return { name: h.name, weeks, lit: weeks >= 3 };
+        })
+        .filter((sk) => sk.weeks >= 3)   // only show lit streaks (>= 3 weeks)
+        .sort((a, b) => b.weeks - a.weeks)
+        .slice(0, 3);
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -281,6 +291,20 @@ export default function UserProfileScreen() {
                     <Text style={styles.name}>{displayName} {isPrivate && <Text style={styles.lockBadge}>🔒</Text>}</Text>
                     <Text style={styles.username}>@{username}</Text>
                     {bio ? <Text style={styles.bio}>{bio}</Text> : null}
+                    {/* Top streaks */}
+                    {topStreaks.length > 0 && (
+                        <View style={styles.streakWrap}>
+                            {topStreaks.map((sk) => (
+                                <View key={sk.name} style={[styles.streakChip, sk.lit ? styles.streakChipLit : styles.streakChipCold]}>
+                                    <Text style={[styles.fire, !sk.lit && styles.fireCold]}>🔥</Text>
+                                    <Text style={[styles.streakLabel, sk.lit ? styles.streakLabelLit : styles.streakLabelCold]}>
+                                        {sk.name} · {sk.weeks}w
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
 
                     {/* Follower / following counts */}
                     <View style={styles.followRow}>
@@ -499,6 +523,15 @@ const styles = StyleSheet.create({
     statNumber: { fontSize: 18, fontWeight: 'bold', color: '#4CAF50', textAlign: 'center' },
     statLabel: { fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center' },
     sectionTitle: { fontSize: 18, fontWeight: 'bold', marginTop: 24, marginBottom: 12, paddingHorizontal: 16 },
+    streakWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 16, marginTop: 12, marginBottom: 4 },
+    streakChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14 },
+    streakChipLit: { backgroundColor: '#FFF3E0' },
+    streakChipCold: { backgroundColor: '#f0f0f0' },
+    fire: { fontSize: 12, marginRight: 4 },
+    fireCold: { opacity: 0.3 },
+    streakLabel: { fontSize: 11, fontWeight: '600' },
+    streakLabelLit: { color: '#E53935' },
+    streakLabelCold: { color: '#999' },
     tabRow: { flexDirection: 'row', backgroundColor: '#fff', marginTop: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
     tabBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
     tabBtnActive: { borderBottomColor: '#4CAF50' },
