@@ -1,20 +1,25 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-  addDoc,
-  arrayRemove,
-  arrayUnion,
-  collection, doc, getDoc, getDocs,
-  orderBy, query, serverTimestamp,
-  updateDoc, where
+    addDoc,
+    arrayRemove,
+    arrayUnion,
+    collection, doc, getDoc, getDocs,
+    orderBy, query, serverTimestamp,
+    updateDoc, where
 } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  FlatList,
-  Image,
-  KeyboardAvoidingView, Modal, Platform,
-  RefreshControl,
-  StyleSheet, Text, TextInput, TouchableOpacity, View
+    Animated,
+    Easing,
+    FlatList,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    RefreshControl,
+    StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
@@ -29,6 +34,8 @@ type Post = {
   likes: string[];
   commentCount: number;
   createdAt: any;
+  habitTarget?: number;
+  habitStreak?: number;
 };
 
 type Comment = {
@@ -40,6 +47,14 @@ type Comment = {
   createdAt: any;
 };
 
+type UserSummary = {
+  id: string;
+  displayName: string;
+  username: string;
+  photoUrl?: string;
+  isFollowing?: boolean;
+};
+
 export default function HomeScreen() {
   const [currentUserId, setCurrentUserId] = useState('');
   const [posts, setPosts] = useState<Post[]>([]);
@@ -49,32 +64,103 @@ export default function HomeScreen() {
 
   // Comment modal
   const [commentModal, setCommentModal] = useState(false);
+  const [likeModal, setLikeModal] = useState(false);
   const [activePost, setActivePost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [likedUsers, setLikedUsers] = useState<UserSummary[]>([]);
+  const [loadingLikes, setLoadingLikes] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [commentDisplayName, setCommentDisplayName] = useState('');
   const [commentUsername, setCommentUsername] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const sheetHeight = useRef(new Animated.Value(70)).current;
+  const sheetHeightStyle = sheetHeight.interpolate({
+    inputRange: [70, 84],
+    outputRange: ['70%', '84%'],
+  });
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) return;
-      setCurrentUserId(user.uid);
-
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (userDoc.exists()) {
-        setCommentDisplayName(userDoc.data().displayName || '');
-        setCommentUsername(userDoc.data().username || '');
-      }
-
-      await loadFollowingAndPosts(user.uid);
+    const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+      Animated.timing(sheetHeight, {
+        toValue: 84,
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }).start();
     });
-    return () => unsub();
-  }, []);
+    const keyboardDidHide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+      Animated.timing(sheetHeight, {
+        toValue: 70,
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }).start();
+    });
+
+    return () => {
+      keyboardDidShow.remove();
+      keyboardDidHide.remove();
+    };
+  }, [sheetHeight]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const unsub = onAuthStateChanged(auth, async (user) => {
+        if (!user) return;
+        setCurrentUserId(user.uid);
+
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          setCommentDisplayName(userDoc.data().displayName || '');
+          setCommentUsername(userDoc.data().username || '');
+        }
+
+        await loadFollowingAndPosts(user.uid);
+      });
+      return () => unsub();
+    }, [])
+  );
 
   const isValidImageUrl = (url: any) => {
     if (typeof url !== 'string') return false;
     const trimmed = url.trim();
     return trimmed.length > 0 && /^(https?:\/\/|blob:|data:)/.test(trimmed);
+  };
+
+  const getWeekStreak = (completedDates: string[], commitment: number) => {
+    if (!commitment || commitment <= 0) return 0;
+    if (!completedDates || completedDates.length === 0) return 0;
+
+    const weekMap: Record<string, number> = {};
+    completedDates.forEach((dateStr) => {
+      const d = new Date(dateStr);
+      const day = d.getDay();
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - ((day + 6) % 7));
+      const weekKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+      weekMap[weekKey] = (weekMap[weekKey] || 0) + 1;
+    });
+
+    const today = new Date();
+    const todayDay = today.getDay();
+    const thisMonday = new Date(today);
+    thisMonday.setDate(today.getDate() - ((todayDay + 6) % 7));
+
+    let checkMonday = new Date(thisMonday);
+    let currentStreak = 0;
+    while (true) {
+      const weekKey = `${checkMonday.getFullYear()}-${String(checkMonday.getMonth() + 1).padStart(2, '0')}-${String(checkMonday.getDate()).padStart(2, '0')}`;
+      if (weekMap[weekKey] >= commitment) {
+        currentStreak++;
+        checkMonday.setDate(checkMonday.getDate() - 7);
+      } else {
+        break;
+      }
+    }
+
+    return currentStreak;
   };
 
   const loadFollowingAndPosts = async (uid: string) => {
@@ -132,7 +218,28 @@ export default function HomeScreen() {
       const allPosts = Object.values(byId)
         .filter((p) => isValidImageUrl(p.imageUrl))   // photo posts only — journal-only posts stay out of the feed
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      setPosts(allPosts);
+
+      const enrichedPosts = await Promise.all(
+        allPosts.map(async (post) => {
+          if (!post.habitName) return post;
+          const habitSnap = await getDocs(query(
+            collection(db, 'habits'),
+            where('userId', '==', post.userId),
+            where('name', '==', post.habitName)
+          ));
+          const habitDoc = habitSnap.docs[0];
+          if (!habitDoc) return post;
+          const data = habitDoc.data() as any;
+          const commitment = data.commitment ?? 1;
+          return {
+            ...post,
+            habitTarget: commitment,
+            habitStreak: getWeekStreak(data.completedDates || [], commitment),
+          };
+        })
+      );
+
+      setPosts(enrichedPosts);
     } catch (e) {
       setPosts([]);
     } finally {
@@ -154,6 +261,35 @@ export default function HomeScreen() {
           : p
       )
     );
+  };
+
+  const openLikers = async (post: Post) => {
+    setActivePost(post);
+    setLikeModal(true);
+    setLoadingLikes(true);
+    try {
+      const ids = Array.from(new Set((post.likes || []).filter(Boolean)));
+      const users = await Promise.all(
+        ids.map(async (uid) => {
+          const userDoc = await getDoc(doc(db, 'users', uid));
+          if (!userDoc.exists()) return null;
+          const data = userDoc.data();
+          const followingDoc = await getDoc(doc(db, 'users', currentUserId, 'following', uid));
+          return {
+            id: userDoc.id,
+            displayName: data.displayName || '',
+            username: data.username || '',
+            photoUrl: data.photoUrl || '',
+            isFollowing: followingDoc.exists(),
+          } as UserSummary;
+        })
+      );
+      setLikedUsers(users.filter(Boolean) as UserSummary[]);
+    } catch (e) {
+      setLikedUsers([]);
+    } finally {
+      setLoadingLikes(false);
+    }
   };
 
   const openComments = async (post: Post) => {
@@ -206,8 +342,10 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         {/* Habit tag */}
-        <View style={styles.habitTag}>
-          <Text style={styles.habitTagText}>🔥 {item.habitName}</Text>
+        <View style={styles.habitChipRow}>
+          <View style={styles.habitChip}>
+            <Text style={styles.habitChipText}>🔥 {item.habitName} · {item.habitStreak ?? 0}w</Text>
+          </View>
         </View>
 
         {/* Image */}
@@ -224,10 +362,14 @@ export default function HomeScreen() {
 
         {/* Actions */}
         <View style={styles.postActions}>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item)}>
-            <Text style={styles.actionIcon}>{liked ? '❤️' : '🤍'}</Text>
-            <Text style={styles.actionCount}>{item.likes.length}</Text>
-          </TouchableOpacity>
+          <View style={styles.actionBtn}>
+            <TouchableOpacity onPress={() => handleLike(item)}>
+              <Text style={styles.actionIcon}>{liked ? '❤️' : '🤍'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => openLikers(item)}>
+              <Text style={styles.actionCount}>{item.likes.length}</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity style={styles.actionBtn} onPress={() => openComments(item)}>
             <Text style={styles.actionIcon}>💬</Text>
             <Text style={styles.actionCount}>{item.commentCount || 0}</Text>
@@ -275,59 +417,130 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* Comment Modal */}
-      <Modal visible={commentModal} animationType="slide" onRequestClose={() => setCommentModal(false)}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.commentContainer}>
+      {/* Likes Modal */}
+      <Modal
+        visible={likeModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setLikeModal(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setLikeModal(false)} />
+          <View style={styles.sheetContainer}>
+            <View style={styles.sheetHandle} />
             <View style={styles.commentHeader}>
-              <Text style={styles.commentTitle}>Comments</Text>
-              <TouchableOpacity onPress={() => setCommentModal(false)}>
+              <Text style={styles.commentTitle}>Likes</Text>
+              <TouchableOpacity onPress={() => setLikeModal(false)}>
                 <Text style={styles.commentClose}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <FlatList
-              data={comments}
-              keyExtractor={(item) => item.id}
-              style={{ flex: 1 }}
-              renderItem={({ item }) => {
-                const openProfile = () => {
-                  setCommentModal(false);
-                  router.push(`/user-profile?id=${item.userId}`);
-                };
-                return (
-                  <View style={styles.commentItem}>
-                    <TouchableOpacity onPress={openProfile}>
-                  <View style={styles.commentAvatar}>
-                  <Text style={styles.commentAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
-                  </View>
+            {loadingLikes ? (
+              <Text style={styles.noComments}>Loading likes...</Text>
+            ) : likedUsers.length === 0 ? (
+              <Text style={styles.noComments}>No likes yet.</Text>
+            ) : (
+              <FlatList
+                data={likedUsers}
+                keyExtractor={(item) => item.id}
+                style={{ flex: 1 }}
+                renderItem={({ item }) => {
+                  const openProfile = () => {
+                    setLikeModal(false);
+                    router.push(`/user-profile?id=${item.id}`);
+                  };
+                  const isMe = item.id === currentUserId;
+                  return (
+                    <TouchableOpacity style={styles.commentItem} onPress={openProfile}>
+                      <View style={styles.commentAvatar}>
+                        <Text style={styles.commentAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
+                      </View>
+                      <View style={styles.commentContent}>
+                        <Text style={styles.commentName}>{item.displayName}</Text>
+                        <Text style={styles.commentUser}>@{item.username}</Text>
+                      </View>
+                      {!isMe && (
+                        <View style={[styles.followBadge, item.isFollowing ? styles.followBadgeFollowing : styles.followBadgeFollow]}>
+                          <Text style={[styles.followBadgeText, item.isFollowing ? styles.followBadgeTextFollowing : styles.followBadgeTextFollow]}>
+                            {item.isFollowing ? 'Following' : 'Follow'}
+                          </Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
-                    <View style={styles.commentContent}>
-                      <Text style={styles.commentName} onPress={openProfile}>
-                        {item.displayName} <Text style={styles.commentUser}>@{item.username}</Text>
-                      </Text>
-                      <Text style={styles.commentText}>{item.text}</Text>
-                    </View>
-                  </View>
-                );
-              }}
-              ListEmptyComponent={<Text style={styles.noComments}>No comments yet. Be the first!</Text>}
-            />
-
-            <View style={styles.commentInputRow}>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Add a comment..."
-                value={commentText}
-                onChangeText={setCommentText}
-                multiline
+                  );
+                }}
               />
-              <TouchableOpacity style={styles.commentSendBtn} onPress={submitComment}>
-                <Text style={styles.commentSendText}>Send</Text>
-              </TouchableOpacity>
-            </View>
+            )}
           </View>
-        </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={commentModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCommentModal(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setCommentModal(false)} />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={0}
+            style={styles.sheetContentWrapper}
+          >
+            <Animated.View style={[styles.sheetContainer, { height: sheetHeightStyle as any, maxHeight: sheetHeightStyle as any }]}>
+              <View style={styles.sheetHandle} />
+              <View style={styles.commentHeader}>
+                <Text style={styles.commentTitle}>Comments</Text>
+                <TouchableOpacity onPress={() => setCommentModal(false)} style={styles.closeButton}>
+                  <Text style={styles.commentClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <FlatList
+                data={comments}
+                keyExtractor={(item) => item.id}
+                style={{ flex: 1 }}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => {
+                  const openProfile = () => {
+                    setCommentModal(false);
+                    router.push(`/user-profile?id=${item.userId}`);
+                  };
+                  return (
+                    <View style={styles.commentItem}>
+                      <TouchableOpacity onPress={openProfile}>
+                        <View style={styles.commentAvatar}>
+                          <Text style={styles.commentAvatarText}>{item.displayName?.[0]?.toUpperCase() || '?'}</Text>
+                        </View>
+                      </TouchableOpacity>
+                      <View style={styles.commentContent}>
+                        <Text style={styles.commentName} onPress={openProfile}>
+                          {item.displayName} <Text style={styles.commentUser}>@{item.username}</Text>
+                        </Text>
+                        <Text style={styles.commentText}>{item.text}</Text>
+                      </View>
+                    </View>
+                  );
+                }}
+                ListEmptyComponent={<Text style={styles.noComments}>No comments yet. Be the first!</Text>}
+              />
+
+              <View style={styles.commentInputRow}>
+                <TextInput
+                  style={styles.commentInput}
+                  placeholder="Add a comment..."
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  multiline
+                />
+                <TouchableOpacity style={styles.commentSendBtn} onPress={submitComment}>
+                  <Text style={styles.commentSendText}>Send</Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
   );
@@ -352,30 +565,43 @@ const styles = StyleSheet.create({
   postAvatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   postDisplayName: { fontSize: 15, fontWeight: '600' },
   postUsername: { fontSize: 12, color: '#888' },
-  habitTag: { marginHorizontal: 12, marginBottom: 8, alignSelf: 'flex-start', backgroundColor: '#f0fff0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#4CAF50' },
-  habitTagText: { fontSize: 12, color: '#4CAF50', fontWeight: '600' },
+  habitChipRow: { marginHorizontal: 12, marginBottom: 12 },
+  habitChip: { alignSelf: 'flex-start', backgroundColor: '#FFF3E0', borderWidth: 1, borderColor: '#F2C94C', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  habitChipText: { fontSize: 13, color: '#B45309', fontWeight: '600' },
   postImage: { width: '100%', height: 300 },
   postImagePlaceholder: { width: '100%', height: 200, backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' },
   postImagePlaceholderText: { fontSize: 48 },
-  postCaption: { fontSize: 14, color: '#333', padding: 12, paddingBottom: 8 },
+  postCaption: { fontSize: 14, color: '#333', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8, lineHeight: 20 },
   postActions: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 4, gap: 16 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   actionIcon: { fontSize: 20 },
   actionCount: { fontSize: 14, color: '#666' },
+  sheetOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, top: 0, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject },
+  sheetContentWrapper: { flex: 1, justifyContent: 'flex-end', paddingBottom: 0 },
+  sheetContainer: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, height: '70%', maxHeight: '70%', paddingBottom: 4, marginBottom: 0, overflow: 'hidden', alignSelf: 'stretch' },
+  sheetHandle: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#ddd', alignSelf: 'center', marginTop: 6, marginBottom: 2 },
   commentContainer: { flex: 1, backgroundColor: '#fff' },
-  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee', paddingTop: 56 },
-  commentTitle: { fontSize: 18, fontWeight: 'bold' },
-  commentClose: { fontSize: 18, color: '#888' },
-  commentItem: { flexDirection: 'row', padding: 12, gap: 10, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
-  commentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
-  commentAvatarText: { color: '#fff', fontWeight: 'bold' },
+  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  commentTitle: { fontSize: 16, fontWeight: '700' },
+  closeButton: { padding: 4 },
+  commentClose: { fontSize: 18, color: '#666' },
+  commentItem: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 12, gap: 12, borderBottomWidth: 1, borderBottomColor: '#f5f5f5', alignItems: 'flex-start' },
+  commentAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
+  commentAvatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   commentContent: { flex: 1 },
-  commentName: { fontSize: 14, fontWeight: '600' },
-  commentUser: { fontWeight: 'normal', color: '#888' },
+  commentName: { fontSize: 15, fontWeight: '600' },
+  commentUser: { fontSize: 13, fontWeight: 'normal', color: '#888' },
+  followBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, alignSelf: 'center' },
+  followBadgeFollowing: { backgroundColor: '#E8F5E9' },
+  followBadgeFollow: { backgroundColor: '#4CAF50' },
+  followBadgeText: { fontSize: 12, fontWeight: '600' },
+  followBadgeTextFollowing: { color: '#2E7D32' },
+  followBadgeTextFollow: { color: '#fff' },
   commentText: { fontSize: 14, color: '#333', marginTop: 2 },
   noComments: { textAlign: 'center', color: '#aaa', padding: 32 },
-  commentInputRow: { flexDirection: 'row', padding: 12, paddingBottom: 36, borderTopWidth: 1, borderTopColor: '#eee', gap: 8 },
-  commentInput: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, fontSize: 14, maxHeight: 80 },
-  commentSendBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, justifyContent: 'center' },
-  commentSendText: { color: '#fff', fontWeight: 'bold' },
+  commentInputRow: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 10, paddingBottom: 14, borderTopWidth: 1, borderTopColor: '#eee', gap: 8, alignItems: 'center' },
+  commentInput: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, maxHeight: 96, backgroundColor: '#f8f8f8' },
+  commentSendBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, justifyContent: 'center' },
+  commentSendText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

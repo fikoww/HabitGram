@@ -1,7 +1,7 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
@@ -132,56 +132,60 @@ export default function ProfileScreen() {
     const { width: winWidth } = useWindowDimensions();
     const gridSize = Math.floor((winWidth - 4) / 3);
 
-    useEffect(() => {
-        let unsubscribeHabits: (() => void) | undefined;
-        let unsubscribeUser: (() => void) | undefined;
-        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-            if (!user) return;
-            unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
-                if (userDoc.exists()) {
-                    const data = userDoc.data();
-                    setDisplayName(data.displayName || '');
-                    setUsername(data.username || '');
-                    setBio(data.bio || '');
-                    setPhotoUrl(data.photoUrl || '');
-                }
+    useFocusEffect(
+        useCallback(() => {
+            let unsubscribeHabits: (() => void) | undefined;
+            let unsubscribeUser: (() => void) | undefined;
+            const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+                if (!user) return;
+                unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
+                    if (userDoc.exists()) {
+                        const data = userDoc.data();
+                        setDisplayName(data.displayName || '');
+                        setUsername(data.username || '');
+                        setBio(data.bio || '');
+                        setPhotoUrl(data.photoUrl || '');
+                    }
+                });
+                const q = query(collection(db, 'habits'), where('userId', '==', user.uid));
+                unsubscribeHabits = onSnapshot(q, (snapshot) => {
+                    const loaded = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Habit, 'id'>) }));
+                    loaded.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+                    setHabits(loaded);
+                });
             });
-            const q = query(collection(db, 'habits'), where('userId', '==', user.uid));
-            unsubscribeHabits = onSnapshot(q, (snapshot) => {
-                const loaded = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Habit, 'id'>) }));
-                loaded.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-                setHabits(loaded);
-            });
-        });
-        return () => {
-            unsubscribeAuth();
-            if (unsubscribeHabits) unsubscribeHabits();
-            if (unsubscribeUser) unsubscribeUser();
-        };
-    }, []);
+            return () => {
+                unsubscribeAuth();
+                if (unsubscribeHabits) unsubscribeHabits();
+                if (unsubscribeUser) unsubscribeUser();
+            };
+        }, [])
+    );
 
     // Listen to my followers / following / pending-request counts
-    useEffect(() => {
-        let unsubs: (() => void)[] = [];
-        const unsubAuth = onAuthStateChanged(auth, (user) => {
-            if (!user) return;
-            unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followers'), (s) => setFollowersCount(s.size)));
-            unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'following'), (s) => setFollowingCount(s.size)));
-            unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followRequests'), (s) => setPendingCount(s.size)));
-            // My posts (sorted client-side to avoid needing a composite index)
-            const pq = query(collection(db, 'posts'), where('userId', '==', user.uid));
-            unsubs.push(onSnapshot(pq, (snap) => {
-                const list = snap.docs
-                    .map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }))
-                    .filter((p) => hasPhoto(p.imageUrl));
-                list.sort((a, b) => {
-                    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-                });
-                setPosts(list);
-            }));
-        });
-        return () => { unsubAuth(); unsubs.forEach((u) => u()); };
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            let unsubs: (() => void)[] = [];
+            const unsubAuth = onAuthStateChanged(auth, (user) => {
+                if (!user) return;
+                unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followers'), (s) => setFollowersCount(s.size)));
+                unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'following'), (s) => setFollowingCount(s.size)));
+                unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followRequests'), (s) => setPendingCount(s.size)));
+                // My posts (sorted client-side to avoid needing a composite index)
+                const pq = query(collection(db, 'posts'), where('userId', '==', user.uid));
+                unsubs.push(onSnapshot(pq, (snap) => {
+                    const list = snap.docs
+                        .map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }))
+                        .filter((p) => hasPhoto(p.imageUrl));
+                    list.sort((a, b) => {
+                        return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+                    });
+                    setPosts(list);
+                }));
+            });
+            return () => { unsubAuth(); unsubs.forEach((u) => u()); };
+        }, [])
+    );
 
     const handleLogout = async () => {
         setMenuVisible(false);
