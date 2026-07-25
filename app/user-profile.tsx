@@ -234,6 +234,9 @@ export default function UserProfileScreen() {
         } finally { setBusy(false); }
     };
 
+    const photoPostCount = posts.length;
+    const totalDoneCount = habits.reduce((sum, h) => sum + (h.completedDates?.length || 0), 0);
+
     const mostConsistent = habits.reduce((best, h) => {
         if (!best) return h;
         const { max } = getWeekStreak(h.completedDates || [], h.commitment ?? 1);
@@ -352,14 +355,12 @@ export default function UserProfileScreen() {
                                 <Text style={styles.statLabel}>Habits</Text>
                             </View>
                             <View style={styles.statBox}>
-                                <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
-                                    {mostConsistent?.name || '-'}
-                                </Text>
-                                <Text style={styles.statLabel}>Most Consistent</Text>
+                                <Text style={styles.statNumber}>{photoPostCount}</Text>
+                                <Text style={styles.statLabel}>Posts</Text>
                             </View>
                             <View style={styles.statBox}>
-                                <Text style={styles.statNumber}>{longestStreak} week(s)</Text>
-                                <Text style={styles.statLabel}>Longest Streak</Text>
+                                <Text style={styles.statNumber}>{totalDoneCount}</Text>
+                                <Text style={styles.statLabel}>Total Done</Text>
                             </View>
                         </View>
 

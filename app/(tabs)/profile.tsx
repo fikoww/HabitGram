@@ -269,14 +269,8 @@ export default function ProfileScreen() {
         setChangeCommitmentHabit(null);
     };
 
-    const mostConsistent = habits.reduce((best, h) => {
-        if (!best) return h;
-        const { max } = getWeekStreak(h.completedDates || [], h.commitment ?? 1);
-        const bestMax = getWeekStreak(best.completedDates || [], best.commitment ?? 1).max;
-        return max > bestMax ? h : best;
-    }, habits[0]);
-
-    const longestStreak = mostConsistent ? getWeekStreak(mostConsistent.completedDates || [], mostConsistent.commitment ?? 1).max : 0;
+    const photoPostCount = posts.length;
+    const totalDoneCount = habits.reduce((sum, h) => sum + (h.completedDates?.length || 0), 0);
 
     // Top 3 current streaks for the streak row (fire is lit at >= 3 weeks)
     const topStreaks = habits
@@ -359,14 +353,12 @@ export default function ProfileScreen() {
                         <Text style={styles.statLabel}>Habits</Text>
                     </View>
                     <View style={styles.statBox}>
-                        <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
-                            {mostConsistent?.name || '-'}
-                        </Text>
-                        <Text style={styles.statLabel}>Most Consistent</Text>
+                        <Text style={styles.statNumber}>{photoPostCount}</Text>
+                        <Text style={styles.statLabel}>Posts</Text>
                     </View>
                     <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>{longestStreak} week(s)</Text>
-                        <Text style={styles.statLabel}>Longest Streak</Text>
+                        <Text style={styles.statNumber}>{totalDoneCount}</Text>
+                        <Text style={styles.statLabel}>Total Done</Text>
                     </View>
                 </View>
 
