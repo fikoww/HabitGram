@@ -72,7 +72,9 @@ export default function CommunityScreen() {
         // Posts in this community (sorted client-side to avoid a composite index)
         const pq = query(collection(db, 'posts'), where('habitName', '==', name));
         const unsubPosts = onSnapshot(pq, (snap) => {
-            const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
+            const list = snap.docs
+                .map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }))
+                .filter((p) => !!p.imageUrl);   // photo posts only — journal-only posts stay out of the feed
             list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             setPosts(list);
             setLoading(false);

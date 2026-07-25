@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
 type Habit = {
@@ -26,6 +26,12 @@ type Post = {
     commentCount?: number;
     completedDate?: string;
     createdAt?: any;
+};
+
+const hasPhoto = (imageUrl: any) => {
+    if (typeof imageUrl !== 'string') return false;
+    const trimmed = imageUrl.trim().toLowerCase();
+    return trimmed.length > 0 && trimmed !== 'null' && trimmed !== 'undefined';
 };
 
 const getWeekDates = () => {
@@ -165,12 +171,10 @@ export default function ProfileScreen() {
             // My posts (sorted client-side to avoid needing a composite index)
             const pq = query(collection(db, 'posts'), where('userId', '==', user.uid));
             unsubs.push(onSnapshot(pq, (snap) => {
-                const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
+                const list = snap.docs
+                    .map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }))
+                    .filter((p) => hasPhoto(p.imageUrl));
                 list.sort((a, b) => {
-                    // Posts with a photo first, then newest within each group
-                    const aHasPhoto = a.imageUrl ? 1 : 0;
-                    const bHasPhoto = b.imageUrl ? 1 : 0;
-                    if (aHasPhoto !== bHasPhoto) return bHasPhoto - aHasPhoto;
                     return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
                 });
                 setPosts(list);

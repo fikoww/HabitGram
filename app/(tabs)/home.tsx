@@ -71,6 +71,12 @@ export default function HomeScreen() {
     return () => unsub();
   }, []);
 
+  const isValidImageUrl = (url: any) => {
+    if (typeof url !== 'string') return false;
+    const trimmed = url.trim();
+    return trimmed.length > 0 && /^(https?:\/\/|blob:|data:)/.test(trimmed);
+  };
+
   const loadFollowingAndPosts = async (uid: string) => {
     setLoading(true);
     try {
@@ -123,9 +129,9 @@ export default function HomeScreen() {
         });
       }
 
-      const allPosts = Object.values(byId).sort(
-        (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
-      );
+      const allPosts = Object.values(byId)
+        .filter((p) => isValidImageUrl(p.imageUrl))   // photo posts only — journal-only posts stay out of the feed
+        .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setPosts(allPosts);
     } catch (e) {
       setPosts([]);

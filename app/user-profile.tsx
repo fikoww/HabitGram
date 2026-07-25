@@ -25,6 +25,12 @@ type Post = {
     createdAt?: any;
 };
 
+const hasPhoto = (imageUrl: any) => {
+    if (typeof imageUrl !== 'string') return false;
+    const trimmed = imageUrl.trim().toLowerCase();
+    return trimmed.length > 0 && trimmed !== 'null' && trimmed !== 'undefined';
+};
+
 const getWeekDates = () => {
     const today = new Date();
     const day = today.getDay();
@@ -154,14 +160,10 @@ export default function UserProfileScreen() {
         // Their posts (sorted client-side to avoid needing a composite index)
         const pq = query(collection(db, 'posts'), where('userId', '==', id));
         const unsubPosts = onSnapshot(pq, (snap) => {
-            const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
-            list.sort((a, b) => {
-                // Posts with a photo first, then newest within each group
-                const aHasPhoto = a.imageUrl ? 1 : 0;
-                const bHasPhoto = b.imageUrl ? 1 : 0;
-                if (aHasPhoto !== bHasPhoto) return bHasPhoto - aHasPhoto;
-                return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-            });
+            const list = snap.docs
+                .map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }))
+                .filter((p) => hasPhoto(p.imageUrl));
+            list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             setPosts(list);
         });
         const unsubFollowers = onSnapshot(collection(db, 'users', id, 'followers'), (s) => setFollowersCount(s.size));

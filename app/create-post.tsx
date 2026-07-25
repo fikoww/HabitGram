@@ -3,12 +3,12 @@ import { router } from 'expo-router';
 import { addDoc, arrayUnion, collection, doc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert, Image, KeyboardAvoidingView, Platform, ScrollView,
-    StyleSheet, Text, TextInput, TouchableOpacity, View
+  ActivityIndicator,
+  Alert, Image, KeyboardAvoidingView, Platform, ScrollView,
+  StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
-import { auth, db } from '../firebaseConfig';
 import { uploadImageToCloudinary } from '../cloudinaryConfig';
+import { auth, db } from '../firebaseConfig';
 
 type Habit = { id: string; name: string };
 
@@ -144,20 +144,25 @@ export default function CreatePostScreen() {
         }
       }
 
+      const hasPhoto = imageUrl.trim().length > 0;
+
       // 1) Create the post
-      await addDoc(collection(db, 'posts'), {
+      const postData: any = {
         userId: user.uid,
         displayName,
         username,
         habitName: selectedHabit.name,
         habitId: selectedHabit.id,
         caption: caption.trim(),
-        imageUrl,
         completedDate: selectedDate,   // which day this log is for
         likes: [],
         commentCount: 0,
         createdAt: serverTimestamp(),
-      });
+      };
+      if (hasPhoto) {
+        postData.imageUrl = imageUrl;
+      }
+      await addDoc(collection(db, 'posts'), postData);
 
       // 2) Mark the habit DONE for the SELECTED date AND save the caption as
       //    that day's journal (defaults to "Completed!" when caption is empty).
