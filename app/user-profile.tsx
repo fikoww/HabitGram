@@ -155,7 +155,13 @@ export default function UserProfileScreen() {
         const pq = query(collection(db, 'posts'), where('userId', '==', id));
         const unsubPosts = onSnapshot(pq, (snap) => {
             const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
-            list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            list.sort((a, b) => {
+                // Posts with a photo first, then newest within each group
+                const aHasPhoto = a.imageUrl ? 1 : 0;
+                const bHasPhoto = b.imageUrl ? 1 : 0;
+                if (aHasPhoto !== bHasPhoto) return bHasPhoto - aHasPhoto;
+                return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+            });
             setPosts(list);
         });
         const unsubFollowers = onSnapshot(collection(db, 'users', id, 'followers'), (s) => setFollowersCount(s.size));

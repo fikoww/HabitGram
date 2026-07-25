@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
 type Habit = {
@@ -166,7 +166,13 @@ export default function ProfileScreen() {
             const pq = query(collection(db, 'posts'), where('userId', '==', user.uid));
             unsubs.push(onSnapshot(pq, (snap) => {
                 const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
-                list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                list.sort((a, b) => {
+                    // Posts with a photo first, then newest within each group
+                    const aHasPhoto = a.imageUrl ? 1 : 0;
+                    const bHasPhoto = b.imageUrl ? 1 : 0;
+                    if (aHasPhoto !== bHasPhoto) return bHasPhoto - aHasPhoto;
+                    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+                });
                 setPosts(list);
             }));
         });
