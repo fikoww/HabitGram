@@ -5,6 +5,16 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
+// Serif display font (OS built-in serif — no font install needed)
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }) as string;
+// Design tokens (minimalist: warm paper, ink text, one terracotta accent)
+const ACCENT = '#C1440E';
+const INK = '#1A1A1A';
+const MUTED = '#9A968E';
+const LINE = '#EAE8E2';
+const PAPER = '#FBFAF8';
+const SURFACE = '#FFFFFF';
+
 type Streak = { name: string; weeks: number; lit: boolean };
 type UserResult = { id: string; displayName: string; username: string; photoUrl?: string; streaks?: Streak[] };
 
@@ -120,7 +130,7 @@ export default function ExploreScreen() {
           <TextInput
             style={styles.searchInput}
             placeholder="Search by username..."
-            placeholderTextColor="#aaa"
+            placeholderTextColor={MUTED}
             value={term}
             onChangeText={setTerm}
             autoCapitalize="none"
@@ -135,7 +145,7 @@ export default function ExploreScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 32 }} color="#4CAF50" />
+        <ActivityIndicator style={{ marginTop: 32 }} color={ACCENT} />
       ) : !term.trim() ? (
         <View style={styles.emptyBox}>
           <Text style={styles.emptyEmoji}>🔎</Text>
@@ -163,9 +173,9 @@ export default function ExploreScreen() {
                 {u.streaks && u.streaks.length > 0 && (
                   <View style={styles.streakWrap}>
                     {u.streaks.map((s) => (
-                      <View key={s.name} style={[styles.streakChip, s.lit ? styles.streakChipLit : styles.streakChipCold]}>
-                        <Text style={[styles.fire, !s.lit && styles.fireCold]}>🔥</Text>
-                        <Text style={[styles.streakLabel, s.lit ? styles.streakLabelLit : styles.streakLabelCold]}>
+                      <View key={s.name} style={styles.streakChip}>
+                        <Text style={styles.fire}>🔥</Text>
+                        <Text style={styles.streakLabel}>
                           {s.name} · {s.weeks}w
                         </Text>
                       </View>
@@ -184,29 +194,24 @@ export default function ExploreScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#4CAF50', marginBottom: 12 },
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', borderRadius: 12, paddingHorizontal: 12 },
+  container: { flex: 1, backgroundColor: PAPER },
+  header: { backgroundColor: PAPER, paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: LINE },
+  headerTitle: { fontSize: 26, fontFamily: SERIF, color: INK, marginBottom: 14, letterSpacing: -0.3 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: SURFACE, borderRadius: 12, paddingHorizontal: 12, borderWidth: 0.5, borderColor: LINE },
   searchIcon: { fontSize: 16, marginRight: 8 },
-  searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#333', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
-  clearIcon: { fontSize: 14, color: '#888', paddingLeft: 8 },
+  searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: INK, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
+  clearIcon: { fontSize: 14, color: MUTED, paddingLeft: 8 },
   emptyBox: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32 },
-  emptyEmoji: { fontSize: 44, marginBottom: 12 },
-  emptyText: { fontSize: 15, color: '#888', textAlign: 'center' },
-  resultRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 12, marginHorizontal: 12, marginTop: 8, borderRadius: 12, gap: 12 },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
-  avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 20 },
-  resultName: { fontSize: 15, fontWeight: '600', color: '#333' },
-  resultUsername: { fontSize: 13, color: '#888', marginTop: 2 },
-  chevron: { fontSize: 24, color: '#ccc' },
+  emptyEmoji: { fontSize: 44, marginBottom: 12, opacity: 0.6 },
+  emptyText: { fontSize: 15, color: MUTED, textAlign: 'center' },
+  resultRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: SURFACE, padding: 12, marginHorizontal: 12, marginTop: 8, borderRadius: 12, gap: 12, borderWidth: 0.5, borderColor: LINE },
+  avatar: { width: 48, height: 48, borderRadius: 14, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center' },
+  avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 20, fontFamily: SERIF },
+  resultName: { fontSize: 15, fontWeight: '600', color: INK },
+  resultUsername: { fontSize: 13, color: MUTED, marginTop: 2 },
+  chevron: { fontSize: 24, color: '#D6D3CB' },
   streakWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  streakChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  streakChipLit: { backgroundColor: '#FFF3E0' },
-  streakChipCold: { backgroundColor: '#f0f0f0' },
+  streakChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, borderWidth: 0.5, borderColor: ACCENT },
   fire: { fontSize: 12, marginRight: 4 },
-  fireCold: { opacity: 0.3 },
-  streakLabel: { fontSize: 11, fontWeight: '600' },
-  streakLabelLit: { color: '#E53935' },
-  streakLabelCold: { color: '#999' },
+  streakLabel: { fontSize: 11, fontWeight: '600', color: ACCENT },
 });

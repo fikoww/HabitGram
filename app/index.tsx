@@ -103,10 +103,10 @@ const styles = StyleSheet.create({
   eyeButton: { padding: 14 },
   eyeIcon: { fontSize: 18 },
   errorText: { color: '#ff4444', fontSize: 13, marginBottom: 8, marginTop: 4 },
-  forgotText: { color: '#4CAF50', fontSize: 13, marginBottom: 16, textAlign: 'right' },
-  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, alignItems: 'center', 
+  forgotText: { color: '#B45309', fontSize: 13, marginBottom: 16, textAlign: 'right' },
+  button: { backgroundColor: '#C17F3F', padding: 14, borderRadius: 10, alignItems: 'center', 
             marginTop: 4, marginBottom: 16 },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   register: { textAlign: 'center', color: '#888', fontSize: 14 },
-  registerLink: { color: '#4CAF50', fontWeight: 'bold' },
+  registerLink: { color: '#B45309', fontWeight: 'bold' },
 });

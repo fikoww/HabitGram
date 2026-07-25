@@ -41,14 +41,14 @@ export default function TabLayout() {
         name="communities"
         options={{
           title: 'Communities',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🌍" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon emoji="👥" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🙂" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon emoji="👤" focused={focused} />,
         }}
       />
     </Tabs>

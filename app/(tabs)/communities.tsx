@@ -1,8 +1,18 @@
 import { router } from 'expo-router';
 import { collection, getDocs } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { db } from '../../firebaseConfig';
+
+// Serif display font (OS built-in serif — no font install needed)
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }) as string;
+// Design tokens (minimalist: warm paper, ink text, one terracotta accent)
+const ACCENT = '#C1440E';
+const INK = '#1A1A1A';
+const MUTED = '#9A968E';
+const LINE = '#EAE8E2';
+const PAPER = '#FBFAF8';
+const SURFACE = '#FFFFFF';
 
 type Community = { id: string; name: string; category: string; members: number };
 
@@ -49,7 +59,7 @@ export default function CommunitiesScreen() {
             </View>
 
             {loading ? (
-                <ActivityIndicator style={{ marginTop: 32 }} color="#4CAF50" />
+                <ActivityIndicator style={{ marginTop: 32 }} color={ACCENT} />
             ) : communities.length === 0 ? (
                 <View style={styles.emptyBox}>
                     <Text style={styles.emptyEmoji}>🌍</Text>
@@ -80,19 +90,19 @@ export default function CommunitiesScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
-    header: { backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#4CAF50' },
-    headerSub: { fontSize: 13, color: '#888', marginTop: 4 },
+    container: { flex: 1, backgroundColor: PAPER },
+    header: { backgroundColor: PAPER, paddingHorizontal: 16, paddingTop: 56, paddingBottom: 16, borderBottomWidth: 0.5, borderBottomColor: LINE },
+    headerTitle: { fontSize: 26, fontFamily: SERIF, color: INK, letterSpacing: -0.3 },
+    headerSub: { fontSize: 13, color: MUTED, marginTop: 5 },
     emptyBox: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32 },
-    emptyEmoji: { fontSize: 44, marginBottom: 12 },
-    emptyText: { fontSize: 15, color: '#888', textAlign: 'center' },
-    card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 14, marginBottom: 8, borderRadius: 12, gap: 12 },
-    iconCircle: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
-    iconText: { color: '#fff', fontWeight: 'bold', fontSize: 20 },
-    cName: { fontSize: 16, fontWeight: '600', color: '#333' },
-    cCategory: { fontSize: 12, color: '#888', marginTop: 2 },
+    emptyEmoji: { fontSize: 44, marginBottom: 12, opacity: 0.6 },
+    emptyText: { fontSize: 15, color: MUTED, textAlign: 'center' },
+    card: { flexDirection: 'row', alignItems: 'center', backgroundColor: SURFACE, padding: 14, marginBottom: 8, borderRadius: 12, gap: 12, borderWidth: 0.5, borderColor: LINE },
+    iconCircle: { width: 48, height: 48, borderRadius: 12, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center' },
+    iconText: { color: '#fff', fontWeight: 'bold', fontSize: 20, fontFamily: SERIF },
+    cName: { fontSize: 16, fontWeight: '600', color: INK },
+    cCategory: { fontSize: 12, color: MUTED, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
     membersBox: { alignItems: 'center' },
-    membersNum: { fontSize: 16, fontWeight: 'bold', color: '#4CAF50' },
-    membersLabel: { fontSize: 10, color: '#aaa' },
+    membersNum: { fontSize: 18, fontWeight: '700', color: INK },
+    membersLabel: { fontSize: 10, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
 });

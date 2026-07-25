@@ -128,9 +128,9 @@ const styles = StyleSheet.create({
   eyeButton: { padding: 14 },
   eyeIcon: { fontSize: 18 },
   errorText: { color: '#ff4444', fontSize: 13, marginBottom: 8 },
-  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, 
+  button: { backgroundColor: '#C17F3F', padding: 14, borderRadius: 10, 
             alignItems: 'center', marginTop: 12, marginBottom: 16 },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   login: { textAlign: 'center', color: '#888', fontSize: 14 },
-  loginLink: { color: '#4CAF50', fontWeight: 'bold' },
+  loginLink: { color: '#B45309', fontWeight: 'bold' },
 });

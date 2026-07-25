@@ -1,27 +1,37 @@
 import { router, useFocusEffect } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    addDoc,
-    arrayRemove,
-    arrayUnion,
-    collection, doc, getDoc, getDocs,
-    orderBy, query, serverTimestamp,
-    updateDoc, where
+  addDoc,
+  arrayRemove,
+  arrayUnion,
+  collection, doc, getDoc, getDocs,
+  orderBy, query, serverTimestamp,
+  updateDoc, where
 } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Easing,
-    FlatList,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    RefreshControl,
-    StyleSheet, Text, TextInput, TouchableOpacity, View
+  Animated,
+  Easing,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  RefreshControl,
+  StyleSheet, Text, TextInput, TouchableOpacity, View
 } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
+
+// Serif display font (OS built-in serif — no font install needed)
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }) as string;
+// Design tokens (minimalist: warm paper, ink text, one terracotta accent)
+const ACCENT = '#C1440E';
+const INK = '#1A1A1A';
+const MUTED = '#9A968E';
+const LINE = '#EAE8E2';
+const PAPER = '#FBFAF8';
+const SURFACE = '#FFFFFF';
 
 type Post = {
   id: string;
@@ -547,30 +557,30 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#4CAF50' },
-  createBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  container: { flex: 1, backgroundColor: PAPER },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: PAPER, borderBottomWidth: 0.5, borderBottomColor: LINE },
+  headerTitle: { fontSize: 24, fontFamily: SERIF, color: INK, letterSpacing: -0.3 },
+  createBtn: { backgroundColor: ACCENT, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   createBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  emptyEmoji: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 8 },
-  emptySubtitle: { fontSize: 15, color: '#888', textAlign: 'center', marginBottom: 24 },
-  emptyText: { fontSize: 16, color: '#888' },
-  exploreBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 },
+  emptyEmoji: { fontSize: 48, marginBottom: 16, opacity: 0.6 },
+  emptyTitle: { fontSize: 21, fontFamily: SERIF, color: INK, marginBottom: 8 },
+  emptySubtitle: { fontSize: 15, color: MUTED, textAlign: 'center', marginBottom: 24, lineHeight: 21 },
+  emptyText: { fontSize: 16, color: MUTED },
+  exploreBtn: { backgroundColor: ACCENT, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 },
   exploreBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  postCard: { backgroundColor: '#fff', marginBottom: 8, paddingBottom: 8 },
+  postCard: { backgroundColor: SURFACE, marginBottom: 8, paddingBottom: 8, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: LINE },
   postHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10 },
-  postAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
-  postAvatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  postDisplayName: { fontSize: 15, fontWeight: '600' },
-  postUsername: { fontSize: 12, color: '#888' },
+  postAvatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center' },
+  postAvatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16, fontFamily: SERIF },
+  postDisplayName: { fontSize: 15, fontWeight: '600', color: INK },
+  postUsername: { fontSize: 12, color: MUTED },
   habitChipRow: { marginHorizontal: 12, marginBottom: 12 },
-  habitChip: { alignSelf: 'flex-start', backgroundColor: '#FFF3E0', borderWidth: 1, borderColor: '#F2C94C', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  habitChipText: { fontSize: 13, color: '#B45309', fontWeight: '600' },
+  habitChip: { alignSelf: 'flex-start', borderWidth: 0.5, borderColor: ACCENT, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999 },
+  habitChipText: { fontSize: 12, color: ACCENT, fontWeight: '600' },
   postImage: { width: '100%', height: 300 },
-  postImagePlaceholder: { width: '100%', height: 200, backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' },
-  postImagePlaceholderText: { fontSize: 48 },
+  postImagePlaceholder: { width: '100%', height: 200, backgroundColor: '#F1EEE9', justifyContent: 'center', alignItems: 'center' },
+  postImagePlaceholderText: { fontSize: 48, opacity: 0.5 },
   postCaption: { fontSize: 14, color: '#333', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8, lineHeight: 20 },
   postActions: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 4, gap: 16 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -579,29 +589,29 @@ const styles = StyleSheet.create({
   sheetOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, top: 0, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
   sheetBackdrop: { ...StyleSheet.absoluteFillObject },
   sheetContentWrapper: { flex: 1, justifyContent: 'flex-end', paddingBottom: 0 },
-  sheetContainer: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, height: '70%', maxHeight: '70%', paddingBottom: 4, marginBottom: 0, overflow: 'hidden', alignSelf: 'stretch' },
+  sheetContainer: { backgroundColor: SURFACE, borderTopLeftRadius: 22, borderTopRightRadius: 22, height: '70%', maxHeight: '70%', paddingBottom: 4, marginBottom: 0, overflow: 'hidden', alignSelf: 'stretch' },
   sheetHandle: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#ddd', alignSelf: 'center', marginTop: 6, marginBottom: 2 },
-  commentContainer: { flex: 1, backgroundColor: '#fff' },
-  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  commentTitle: { fontSize: 16, fontWeight: '700' },
+  commentContainer: { flex: 1, backgroundColor: SURFACE },
+  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: LINE },
+  commentTitle: { fontSize: 17, fontFamily: SERIF, color: INK },
   closeButton: { padding: 4 },
   commentClose: { fontSize: 18, color: '#666' },
-  commentItem: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 12, gap: 12, borderBottomWidth: 1, borderBottomColor: '#f5f5f5', alignItems: 'flex-start' },
-  commentAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
-  commentAvatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  commentItem: { flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 12, gap: 12, borderBottomWidth: 0.5, borderBottomColor: LINE, alignItems: 'flex-start' },
+  commentAvatar: { width: 44, height: 44, borderRadius: 14, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center' },
+  commentAvatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16, fontFamily: SERIF },
   commentContent: { flex: 1 },
-  commentName: { fontSize: 15, fontWeight: '600' },
-  commentUser: { fontSize: 13, fontWeight: 'normal', color: '#888' },
-  followBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, alignSelf: 'center' },
-  followBadgeFollowing: { backgroundColor: '#E8F5E9' },
-  followBadgeFollow: { backgroundColor: '#4CAF50' },
+  commentName: { fontSize: 15, fontWeight: '600', color: INK },
+  commentUser: { fontSize: 13, fontWeight: 'normal', color: MUTED },
+  followBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, alignSelf: 'center' },
+  followBadgeFollowing: { backgroundColor: '#F1EEE9' },
+  followBadgeFollow: { backgroundColor: ACCENT },
   followBadgeText: { fontSize: 12, fontWeight: '600' },
-  followBadgeTextFollowing: { color: '#2E7D32' },
+  followBadgeTextFollowing: { color: ACCENT },
   followBadgeTextFollow: { color: '#fff' },
   commentText: { fontSize: 14, color: '#333', marginTop: 2 },
-  noComments: { textAlign: 'center', color: '#aaa', padding: 32 },
-  commentInputRow: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 10, paddingBottom: 14, borderTopWidth: 1, borderTopColor: '#eee', gap: 8, alignItems: 'center' },
-  commentInput: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, maxHeight: 96, backgroundColor: '#f8f8f8' },
-  commentSendBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, justifyContent: 'center' },
+  noComments: { textAlign: 'center', color: MUTED, padding: 32 },
+  commentInputRow: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 10, paddingBottom: 14, borderTopWidth: 0.5, borderTopColor: LINE, gap: 8, alignItems: 'center' },
+  commentInput: { flex: 1, borderWidth: 0.5, borderColor: LINE, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, maxHeight: 96, backgroundColor: PAPER },
+  commentSendBtn: { backgroundColor: ACCENT, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999, justifyContent: 'center' },
   commentSendText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

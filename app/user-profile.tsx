@@ -2,8 +2,18 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { auth, db } from '../firebaseConfig';
+
+// Serif display font (OS built-in serif — no font install needed)
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }) as string;
+// Design tokens (minimalist: warm paper, ink text, one terracotta accent)
+const ACCENT = '#C1440E';
+const INK = '#1A1A1A';
+const MUTED = '#9A968E';
+const LINE = '#EAE8E2';
+const PAPER = '#FBFAF8';
+const SURFACE = '#FFFFFF';
 
 type Habit = {
     id: string;
@@ -23,12 +33,6 @@ type Post = {
     commentCount?: number;
     completedDate?: string;
     createdAt?: any;
-};
-
-const hasPhoto = (imageUrl: any) => {
-    if (typeof imageUrl !== 'string') return false;
-    const trimmed = imageUrl.trim().toLowerCase();
-    return trimmed.length > 0 && trimmed !== 'null' && trimmed !== 'undefined';
 };
 
 const getWeekDates = () => {
@@ -75,6 +79,7 @@ const getWeekStreak = (completedDates: string[], commitment: number) => {
     const todayDay = today.getDay();
     const thisMonday = new Date(today);
     thisMonday.setDate(today.getDate() - ((todayDay + 6) % 7));
+
     let checkMonday = new Date(thisMonday);
     let currentStreak = 0;
     while (true) {
@@ -86,6 +91,7 @@ const getWeekStreak = (completedDates: string[], commitment: number) => {
             break;
         }
     }
+
     return { current: currentStreak, max: maxStreak };
 };
 
@@ -93,9 +99,6 @@ const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export default function UserProfileScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
-    const [myId, setMyId] = useState('');
-    const [myInfo, setMyInfo] = useState<{ displayName: string; username: string; photoUrl: string }>({ displayName: '', username: '', photoUrl: '' });
-
     const [displayName, setDisplayName] = useState('');
     const [username, setUsername] = useState('');
     const [bio, setBio] = useState('');
@@ -106,37 +109,24 @@ export default function UserProfileScreen() {
     const [activeTab, setActiveTab] = useState<'posts' | 'habits'>('posts');
     const [selectedPost, setSelectedPost] = useState<Post | null>(null);
     const [loading, setLoading] = useState(true);
-    const [notFound, setNotFound] = useState(false);
 
-    // Follow state
+    const [meId, setMeId] = useState('');
     const [followState, setFollowState] = useState<'none' | 'requested' | 'following'>('none');
     const [followersCount, setFollowersCount] = useState(0);
     const [followingCount, setFollowingCount] = useState(0);
-    const [busy, setBusy] = useState(false);
 
     const weekDates = getWeekDates();
-
-    // 3 columns: subtract the two 2px gaps, floor to avoid sub-pixel wrapping
     const { width: winWidth } = useWindowDimensions();
     const gridSize = Math.floor((winWidth - 4) / 3);
 
-    // Current user id + my info (for storing in the request)
     useEffect(() => {
-        const unsub = onAuthStateChanged(auth, async (user) => {
-            if (!user) return;
-            setMyId(user.uid);
-            const meDoc = await getDoc(doc(db, 'users', user.uid));
-            if (meDoc.exists()) {
-                const d = meDoc.data();
-                setMyInfo({ displayName: d.displayName || '', username: d.username || '', photoUrl: d.photoUrl || '' });
-            }
-        });
+        const unsub = onAuthStateChanged(auth, (u) => { if (u) setMeId(u.uid); });
         return () => unsub();
     }, []);
 
-    // Load target user + their habits
     useEffect(() => {
         if (!id) return;
+
         const unsubUser = onSnapshot(doc(db, 'users', id), (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
@@ -145,105 +135,91 @@ export default function UserProfileScreen() {
                 setBio(data.bio || '');
                 setPhotoUrl(data.photoUrl || '');
                 setIsPrivate(data.isPrivate === true);
-            } else {
-                setNotFound(true);
             }
             setLoading(false);
         });
-        const q = query(collection(db, 'habits'), where('userId', '==', id));
-        const unsubHabits = onSnapshot(q, (snap) => {
+
+        const unsubHabits = onSnapshot(query(collection(db, 'habits'), where('userId', '==', id)), (snap) => {
             const loaded = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Habit, 'id'>) }));
             loaded.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
             setHabits(loaded);
         });
-        // Follower/following counts (of the target user)
+
         // Their posts (sorted client-side to avoid needing a composite index)
         const pq = query(collection(db, 'posts'), where('userId', '==', id));
         const unsubPosts = onSnapshot(pq, (snap) => {
-            const list = snap.docs
-                .map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }))
-                .filter((p) => hasPhoto(p.imageUrl));
-            list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
+            list.sort((a, b) => {
+                const aHasPhoto = a.imageUrl ? 1 : 0;
+                const bHasPhoto = b.imageUrl ? 1 : 0;
+                if (aHasPhoto !== bHasPhoto) return bHasPhoto - aHasPhoto;
+                return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+            });
             setPosts(list);
         });
+
         const unsubFollowers = onSnapshot(collection(db, 'users', id, 'followers'), (s) => setFollowersCount(s.size));
         const unsubFollowing = onSnapshot(collection(db, 'users', id, 'following'), (s) => setFollowingCount(s.size));
+
         return () => { unsubUser(); unsubHabits(); unsubPosts(); unsubFollowers(); unsubFollowing(); };
     }, [id]);
 
-    // My relationship to the target (following? requested?)
+    // Am I following / requested?
     useEffect(() => {
-        if (!myId || !id || myId === id) return;
-        const unsubFollowing = onSnapshot(doc(db, 'users', myId, 'following', id), (snap) => {
+        if (!meId || !id || meId === id) return;
+        const unsubF = onSnapshot(doc(db, 'users', meId, 'following', id), (snap) => {
             if (snap.exists()) setFollowState('following');
             else {
-                // not following — check if request pending
-                setFollowState((prev) => (prev === 'following' ? 'none' : prev));
+                const unsubR = onSnapshot(doc(db, 'users', id, 'followRequests', meId), (r) => {
+                    setFollowState(r.exists() ? 'requested' : 'none');
+                });
+                return () => unsubR();
             }
         });
-        const unsubReq = onSnapshot(doc(db, 'users', id, 'followRequests', myId), (snap) => {
-            setFollowState((prev) => {
-                if (prev === 'following') return prev;
-                return snap.exists() ? 'requested' : 'none';
-            });
-        });
-        return () => { unsubFollowing(); unsubReq(); };
-    }, [myId, id]);
+        return () => unsubF();
+    }, [meId, id]);
+
+    const isMe = meId === id;
+
+    const sendFollow = async () => {
+        if (!meId || !id) return;
+        await setDoc(doc(db, 'users', meId, 'following', id), { createdAt: serverTimestamp() });
+        await setDoc(doc(db, 'users', id, 'followers', meId), { createdAt: serverTimestamp() });
+    };
 
     const sendRequest = async () => {
-        if (!myId || !id) return;
-        setBusy(true);
-        try {
-            await setDoc(doc(db, 'users', id, 'followRequests', myId), {
-                displayName: myInfo.displayName,
-                username: myInfo.username,
-                photoUrl: myInfo.photoUrl,
-                requestedAt: serverTimestamp(),
-            });
-            setFollowState('requested');
-        } finally { setBusy(false); }
-    };
-
-    // Public account: follow immediately (no approval needed)
-    const sendFollow = async () => {
-        if (!myId || !id) return;
-        setBusy(true);
-        try {
-            await setDoc(doc(db, 'users', myId, 'following', id), { createdAt: serverTimestamp() });
-            await setDoc(doc(db, 'users', id, 'followers', myId), { createdAt: serverTimestamp() });
-            setFollowState('following');
-        } finally { setBusy(false); }
-    };
-
-    const cancelRequest = async () => {
-        if (!myId || !id) return;
-        setBusy(true);
-        try {
-            await deleteDoc(doc(db, 'users', id, 'followRequests', myId));
-            setFollowState('none');
-        } finally { setBusy(false); }
+        if (!meId || !id) return;
+        const meDoc = await getDoc(doc(db, 'users', meId));
+        const meData = meDoc.exists() ? meDoc.data() : {};
+        await setDoc(doc(db, 'users', id, 'followRequests', meId), {
+            displayName: meData.displayName || '',
+            username: meData.username || '',
+            photoUrl: meData.photoUrl || '',
+            requestedAt: serverTimestamp(),
+        });
     };
 
     const unfollow = async () => {
-        if (!myId || !id) return;
-        setBusy(true);
-        try {
-            await deleteDoc(doc(db, 'users', myId, 'following', id));
-            await deleteDoc(doc(db, 'users', id, 'followers', myId));
-            setFollowState('none');
-        } finally { setBusy(false); }
+        if (!meId || !id) return;
+        await deleteDoc(doc(db, 'users', meId, 'following', id));
+        await deleteDoc(doc(db, 'users', id, 'followers', meId));
     };
 
-    const photoPostCount = posts.length;
-    const totalDoneCount = habits.reduce((sum, h) => sum + (h.completedDates?.length || 0), 0);
+    const cancelRequest = async () => {
+        if (!meId || !id) return;
+        await deleteDoc(doc(db, 'users', id, 'followRequests', meId));
+    };
 
-    const mostConsistent = habits.reduce((best, h) => {
-        if (!best) return h;
-        const { max } = getWeekStreak(h.completedDates || [], h.commitment ?? 1);
-        const bestMax = getWeekStreak(best.completedDates || [], best.commitment ?? 1).max;
-        return max > bestMax ? h : best;
-    }, habits[0]);
-    const longestStreak = mostConsistent ? getWeekStreak(mostConsistent.completedDates || [], mostConsistent.commitment ?? 1).max : 0;
+    const handleFollowPress = () => {
+        if (followState === 'following') unfollow();
+        else if (followState === 'requested') cancelRequest();
+        else if (isPrivate) sendRequest();
+        else sendFollow();
+    };
+
+    const locked = isPrivate && !isMe && followState !== 'following';
+
+    const totalDone = habits.reduce((sum, h) => sum + (h.completedDates?.length || 0), 0);
 
     // Top 3 current streaks for the streak row (fire is lit at >= 3 weeks)
     const topStreaks = habits
@@ -257,30 +233,17 @@ export default function UserProfileScreen() {
 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#4CAF50" />
+            <View style={[styles.container, { justifyContent: 'center' }]}>
+                <ActivityIndicator size="large" color={ACCENT} />
             </View>
         );
     }
-
-    if (notFound) {
-        return (
-            <View style={styles.loadingContainer}>
-                <Text style={{ color: '#888', marginBottom: 16 }}>User not found.</Text>
-                <TouchableOpacity onPress={() => router.back()}>
-                    <Text style={{ color: '#4CAF50', fontWeight: '600' }}>← Go back</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
-    const isMe = myId === id;
-    const locked = isPrivate && !isMe && followState !== 'following';
 
     return (
         <View style={{ flex: 1 }}>
             <ScrollView style={styles.container}>
-                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                {/* Back */}
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <Text style={styles.backText}>← Back</Text>
                 </TouchableOpacity>
 
@@ -293,23 +256,22 @@ export default function UserProfileScreen() {
                             <Text style={styles.avatarText}>{displayName ? displayName[0].toUpperCase() : '?'}</Text>
                         </View>
                     )}
-                    <Text style={styles.name}>{displayName} {isPrivate && <Text style={styles.lockBadge}>🔒</Text>}</Text>
+                    <Text style={styles.name}>{displayName} {isPrivate ? <Text style={styles.lockMini}>🔒</Text> : null}</Text>
                     <Text style={styles.username}>@{username}</Text>
                     {bio ? <Text style={styles.bio}>{bio}</Text> : null}
                     {/* Top streaks */}
-                    {topStreaks.length > 0 && (
+                    {!locked && topStreaks.length > 0 && (
                         <View style={styles.streakWrap}>
                             {topStreaks.map((sk) => (
-                                <View key={sk.name} style={[styles.streakChip, sk.lit ? styles.streakChipLit : styles.streakChipCold]}>
-                                    <Text style={[styles.fire, !sk.lit && styles.fireCold]}>🔥</Text>
-                                    <Text style={[styles.streakLabel, sk.lit ? styles.streakLabelLit : styles.streakLabelCold]}>
+                                <View key={sk.name} style={styles.streakChip}>
+                                    <Text style={styles.fire}>🔥</Text>
+                                    <Text style={styles.streakLabel}>
                                         {sk.name} · {sk.weeks}w
                                     </Text>
                                 </View>
                             ))}
                         </View>
                     )}
-
 
                     {/* Follower / following counts */}
                     <View style={styles.followRow}>
@@ -321,21 +283,16 @@ export default function UserProfileScreen() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Follow button (only when viewing someone else) */}
+                    {/* Follow button */}
                     {!isMe && (
-                        followState === 'following' ? (
-                            <TouchableOpacity style={[styles.followBtn, styles.followingBtn]} onPress={unfollow} disabled={busy}>
-                                <Text style={styles.followingBtnText}>Following ✓</Text>
-                            </TouchableOpacity>
-                        ) : followState === 'requested' ? (
-                            <TouchableOpacity style={[styles.followBtn, styles.requestedBtn]} onPress={cancelRequest} disabled={busy}>
-                                <Text style={styles.requestedBtnText}>Requested</Text>
-                            </TouchableOpacity>
-                        ) : (
-                            <TouchableOpacity style={styles.followBtn} onPress={isPrivate ? sendRequest : sendFollow} disabled={busy}>
-                                <Text style={styles.followBtnText}>Follow</Text>
-                            </TouchableOpacity>
-                        )
+                        <TouchableOpacity
+                            style={[styles.followButton, followState === 'following' && styles.followingButton, followState === 'requested' && styles.requestedButton]}
+                            onPress={handleFollowPress}
+                        >
+                            <Text style={[styles.followButtonText, (followState === 'following' || followState === 'requested') && styles.followingButtonText]}>
+                                {followState === 'following' ? 'Following ✓' : followState === 'requested' ? 'Requested' : 'Follow'}
+                            </Text>
+                        </TouchableOpacity>
                     )}
                 </View>
 
@@ -344,7 +301,7 @@ export default function UserProfileScreen() {
                     <View style={styles.lockedBox}>
                         <Text style={styles.lockedEmoji}>🔒</Text>
                         <Text style={styles.lockedTitle}>This Account is Private</Text>
-                        <Text style={styles.lockedText}>Follow {displayName || 'this user'} to see their habits and streaks.</Text>
+                        <Text style={styles.lockedText}>Follow this account to see their habits and posts.</Text>
                     </View>
                 ) : (
                     <>
@@ -354,17 +311,17 @@ export default function UserProfileScreen() {
                                 <Text style={styles.statNumber}>{habits.length}</Text>
                                 <Text style={styles.statLabel}>Habits</Text>
                             </View>
-                            <View style={styles.statBox}>
-                                <Text style={styles.statNumber}>{photoPostCount}</Text>
+                            <View style={[styles.statBox, styles.statBoxMiddle]}>
+                                <Text style={styles.statNumber}>{posts.length}</Text>
                                 <Text style={styles.statLabel}>Posts</Text>
                             </View>
                             <View style={styles.statBox}>
-                                <Text style={styles.statNumber}>{totalDoneCount}</Text>
-                                <Text style={styles.statLabel}>Total Done</Text>
+                                <Text style={styles.statNumber}>{totalDone}</Text>
+                                <Text style={styles.statLabel}>Done</Text>
                             </View>
                         </View>
 
-                        {/* Tab switcher: Habits | Posts */}
+                        {/* Tab switcher: Posts | Habits */}
                         <View style={styles.tabRow}>
                             <TouchableOpacity
                                 style={[styles.tabBtn, activeTab === 'posts' && styles.tabBtnActive]}
@@ -417,15 +374,13 @@ export default function UserProfileScreen() {
                             const commitment = habit.commitment ?? 1;
                             const isNoCommitment = commitment === 0;
                             const { current, max } = getWeekStreak(habit.completedDates || [], commitment);
-                            const totalDone = (habit.completedDates || []).length;
+                            const totalDoneH = (habit.completedDates || []).length;
 
                             return (
-                                <View key={habit.id} style={styles.habitCard}>
-                                    <View style={styles.habitHeader}>
-                                        <View style={styles.habitTitleRow}>
-                                            {habit.pinned && <Text style={styles.pinIcon}>📌 </Text>}
-                                            <Text style={styles.habitName}>{habit.name}</Text>
-                                        </View>
+                                <View key={habit.id} style={[styles.habitCard, habit.pinned && styles.habitPinned]}>
+                                    <View style={styles.habitTitleRow}>
+                                        {habit.pinned && <Text style={styles.pinIcon}>📌 </Text>}
+                                        <Text style={styles.habitName}>{habit.name}</Text>
                                     </View>
 
                                     <View style={styles.weekRow}>
@@ -442,7 +397,7 @@ export default function UserProfileScreen() {
                                     {isNoCommitment ? (
                                         <View style={styles.habitStatsRow}>
                                             <Text style={styles.habitStat}>✨ Just do it (no goal)</Text>
-                                            <Text style={styles.habitStatRed}>🔥 {totalDone}x done total</Text>
+                                            <Text style={styles.habitStatRed}>🔥 {totalDoneH}x done total</Text>
                                         </View>
                                     ) : (
                                         <View style={styles.habitStatsRow}>
@@ -497,82 +452,74 @@ export default function UserProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-    backButton: { marginTop: 56, marginLeft: 16, marginBottom: 4, backgroundColor: '#f5f5f5' },
-    backText: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
-    header: { alignItems: 'center', paddingTop: 12, paddingBottom: 24, backgroundColor: '#fff' },
-    avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-    avatarText: { fontSize: 32, color: '#fff', fontWeight: 'bold' },
-    name: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
-    lockBadge: { fontSize: 16 },
-    lockedBox: { alignItems: 'center', marginTop: 40, paddingHorizontal: 32, backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, paddingVertical: 32 },
-    lockedEmoji: { fontSize: 40, marginBottom: 12 },
-    lockedTitle: { fontSize: 17, fontWeight: 'bold', marginBottom: 6 },
-    lockedText: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20 },
-    username: { fontSize: 15, color: '#888' },
-    bio: { fontSize: 14, color: '#555', textAlign: 'center', marginTop: 8, paddingHorizontal: 32, lineHeight: 20 },
-    followRow: { flexDirection: 'row', gap: 24, marginTop: 14 },
-    followItem: { fontSize: 14, color: '#555' },
-    followNum: { fontWeight: 'bold', color: '#333' },
-    followBtn: { marginTop: 16, backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 48 },
-    followBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-    followingBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#4CAF50' },
-    followingBtnText: { color: '#4CAF50', fontWeight: 'bold', fontSize: 15 },
-    requestedBtn: { backgroundColor: '#f0f0f0' },
-    requestedBtnText: { color: '#888', fontWeight: 'bold', fontSize: 15 },
-    statsRow: { flexDirection: 'row', backgroundColor: '#fff', marginTop: 12, padding: 16, justifyContent: 'space-around' },
-    statBox: { alignItems: 'center', flex: 1, paddingHorizontal: 4 },
-    statNumber: { fontSize: 18, fontWeight: 'bold', color: '#4CAF50', textAlign: 'center' },
-    statLabel: { fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center' },
-    sectionTitle: { fontSize: 18, fontWeight: 'bold', marginTop: 24, marginBottom: 12, paddingHorizontal: 16 },
-    streakWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 16, marginTop: 12, marginBottom: 4 },
-    streakChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14 },
-    streakChipLit: { backgroundColor: '#FFF3E0' },
-    streakChipCold: { backgroundColor: '#f0f0f0' },
+    container: { flex: 1, backgroundColor: PAPER },
+    backButton: { paddingTop: 56, paddingHorizontal: 16, paddingBottom: 4 },
+    backText: { color: ACCENT, fontSize: 16, fontWeight: '600' },
+    header: { alignItems: 'center', paddingTop: 12, paddingBottom: 24, backgroundColor: PAPER },
+    avatar: { width: 84, height: 84, borderRadius: 20, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+    avatarText: { fontSize: 34, color: '#fff', fontFamily: SERIF },
+    name: { fontSize: 27, color: INK, fontFamily: SERIF, letterSpacing: -0.3 },
+    lockMini: { fontSize: 16 },
+    username: { fontSize: 14, color: MUTED, marginTop: 3 },
+    bio: { fontSize: 14, color: '#6B6B6B', textAlign: 'center', marginTop: 10, paddingHorizontal: 40, lineHeight: 20 },
+    followRow: { flexDirection: 'row', gap: 28, marginTop: 16 },
+    followItem: { fontSize: 14, color: MUTED },
+    followNum: { fontWeight: '700', color: INK },
+    followButton: { marginTop: 16, backgroundColor: ACCENT, borderRadius: 8, paddingVertical: 9, paddingHorizontal: 40 },
+    followingButton: { backgroundColor: SURFACE, borderWidth: 1, borderColor: LINE },
+    requestedButton: { backgroundColor: SURFACE, borderWidth: 1, borderColor: LINE },
+    followButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+    followingButtonText: { color: INK },
+    streakWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 16, marginTop: 14, marginBottom: 2 },
+    streakChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999, borderWidth: 0.5, borderColor: ACCENT },
     fire: { fontSize: 12, marginRight: 4 },
-    fireCold: { opacity: 0.3 },
-    streakLabel: { fontSize: 11, fontWeight: '600' },
-    streakLabelLit: { color: '#E53935' },
-    streakLabelCold: { color: '#999' },
-    tabRow: { flexDirection: 'row', backgroundColor: '#fff', marginTop: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    tabBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-    tabBtnActive: { borderBottomColor: '#4CAF50' },
-    tabText: { fontSize: 14, color: '#888', fontWeight: '600' },
-    tabTextActive: { color: '#4CAF50' },
+    streakLabel: { fontSize: 11, fontWeight: '600', color: ACCENT },
+    lockedBox: { alignItems: 'center', marginTop: 40, marginHorizontal: 24, backgroundColor: SURFACE, borderRadius: 12, padding: 32, borderWidth: 0.5, borderColor: LINE },
+    lockedEmoji: { fontSize: 44, marginBottom: 12 },
+    lockedTitle: { fontSize: 18, fontFamily: SERIF, color: INK, marginBottom: 8 },
+    lockedText: { fontSize: 14, color: MUTED, textAlign: 'center', lineHeight: 20 },
+    statsRow: { flexDirection: 'row', backgroundColor: PAPER, marginTop: 4, paddingVertical: 18, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: LINE },
+    statBox: { alignItems: 'center', flex: 1, paddingHorizontal: 4 },
+    statBoxMiddle: { borderLeftWidth: 0.5, borderRightWidth: 0.5, borderColor: LINE },
+    statNumber: { fontSize: 25, fontWeight: '700', color: INK, letterSpacing: -0.5 },
+    statLabel: { fontSize: 10, color: MUTED, marginTop: 5, textTransform: 'uppercase', letterSpacing: 1 },
+    tabRow: { flexDirection: 'row', backgroundColor: PAPER, marginTop: 4, borderBottomWidth: 0.5, borderBottomColor: LINE },
+    tabBtn: { flex: 1, paddingVertical: 15, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -0.5 },
+    tabBtnActive: { borderBottomColor: INK },
+    tabText: { fontSize: 14, color: MUTED, fontWeight: '600' },
+    tabTextActive: { color: INK },
     grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2 },
     gridItem: { overflow: 'hidden' },
     gridImage: { width: '100%', height: '100%' },
-    gridNoImage: { width: '100%', height: '100%', backgroundColor: '#f0f7f0', justifyContent: 'center', alignItems: 'center', padding: 6 },
+    gridNoImage: { width: '100%', height: '100%', backgroundColor: '#F1EEE9', justifyContent: 'center', alignItems: 'center', padding: 6 },
     gridNoImageEmoji: { fontSize: 22, marginBottom: 4 },
-    gridNoImageText: { fontSize: 10, color: '#4CAF50', textAlign: 'center', fontWeight: '600' },
-    gridEmpty: { alignItems: 'center', paddingVertical: 40 },
-    gridEmptyEmoji: { fontSize: 40, marginBottom: 10 },
-    postModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
-    postModalBox: { backgroundColor: '#fff', borderRadius: 16, maxHeight: '85%', overflow: 'hidden' },
-    postModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    postModalHabit: { fontSize: 15, fontWeight: 'bold', color: '#4CAF50' },
-    postModalClose: { fontSize: 18, color: '#888' },
-    postModalImage: { width: '100%', height: 320 },
-    postModalBody: { padding: 16 },
-    postModalDate: { fontSize: 12, color: '#888', marginBottom: 8 },
-    postModalCaption: { fontSize: 15, color: '#333', lineHeight: 22 },
-    postModalNoCaption: { fontSize: 14, color: '#bbb', fontStyle: 'italic' },
-    postModalStats: { flexDirection: 'row', gap: 16, marginTop: 16 },
-    postModalStat: { fontSize: 14, color: '#666' },
-    emptyText: { textAlign: 'center', color: '#aaa', fontSize: 14, marginTop: 10, paddingHorizontal: 16 },
-    habitCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginHorizontal: 16, marginBottom: 10, minHeight: 90 },
-    habitHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    habitTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    gridNoImageText: { fontSize: 10, color: ACCENT, textAlign: 'center', fontWeight: '600' },
+    gridEmpty: { alignItems: 'center', paddingVertical: 48 },
+    gridEmptyEmoji: { fontSize: 40, marginBottom: 10, opacity: 0.5 },
+    habitCard: { backgroundColor: SURFACE, borderRadius: 12, padding: 16, marginHorizontal: 16, marginTop: 10, borderWidth: 0.5, borderColor: LINE },
+    habitPinned: { borderWidth: 1.5, borderColor: ACCENT },
+    habitTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     pinIcon: { fontSize: 14 },
-    habitName: { fontSize: 16, fontWeight: '600' },
+    habitName: { fontSize: 16, fontWeight: '600', color: INK },
     weekRow: { flexDirection: 'row', gap: 6, marginBottom: 12 },
-    dayCircle: { width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
-    dayCircleDone: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
-    dayLabel: { fontSize: 11, color: '#aaa', fontWeight: '600' },
+    dayCircle: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: LINE, justifyContent: 'center', alignItems: 'center' },
+    dayCircleDone: { backgroundColor: ACCENT, borderColor: ACCENT },
+    dayLabel: { fontSize: 11, color: MUTED, fontWeight: '600' },
     dayLabelDone: { color: '#fff' },
     habitStatsRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
     habitStat: { fontSize: 12, color: '#666' },
     habitStatPurple: { fontSize: 12, color: '#8E24AA', fontWeight: '700' },
     habitStatRed: { fontSize: 12, color: '#E53935', fontWeight: '700' },
+    postModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
+    postModalBox: { backgroundColor: SURFACE, borderRadius: 16, maxHeight: '85%', overflow: 'hidden' },
+    postModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 0.5, borderBottomColor: LINE },
+    postModalHabit: { fontSize: 15, fontWeight: 'bold', color: ACCENT },
+    postModalClose: { fontSize: 18, color: MUTED },
+    postModalImage: { width: '100%', height: 320 },
+    postModalBody: { padding: 16 },
+    postModalDate: { fontSize: 12, color: MUTED, marginBottom: 8 },
+    postModalCaption: { fontSize: 15, color: '#333', lineHeight: 22 },
+    postModalNoCaption: { fontSize: 14, color: '#bbb', fontStyle: 'italic' },
+    postModalStats: { flexDirection: 'row', gap: 16, marginTop: 16 },
+    postModalStat: { fontSize: 14, color: '#666' },
 });

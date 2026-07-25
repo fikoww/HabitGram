@@ -1,445 +1,290 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import {
+    ActivityIndicator, Alert, Platform, ScrollView,
+    StyleSheet, Text, TextInput, TouchableOpacity, View
+} from 'react-native';
+import { arrayRemove, arrayUnion, setDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
+
+// Serif display font (OS built-in serif — no font install needed)
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }) as string;
+// Design tokens (minimalist: warm paper, ink text, one terracotta accent)
+const ACCENT = '#C1440E';
+const INK = '#1A1A1A';
+const MUTED = '#9A968E';
+const LINE = '#EAE8E2';
+const PAPER = '#FBFAF8';
+const SURFACE = '#FFFFFF';
 
 type Habit = {
     id: string;
     name: string;
-    completed: boolean;
-    completedDates?: string[];
     commitment?: number;
+    completedDates?: string[];
     journals?: Record<string, string>;
-    createdAt?: any;
+    pinned?: boolean;
 };
 
-const getTodayString = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const DAY_NAMES = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const WEEK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
-const getWeekDates = () => {
-    const today = new Date();
-    const day = today.getDay();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - ((day + 6) % 7));
-    const dates = [];
-    for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-    }
-    return dates;
-};
+const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const getWeekStreak = (completedDates: string[], commitment: number) => {
-    if (!commitment || commitment <= 0) return { current: 0, max: 0 };
-    if (!completedDates || completedDates.length === 0) return { current: 0, max: 0 };
-
+    if (!commitment || commitment <= 0) return 0;
+    if (!completedDates || completedDates.length === 0) return 0;
     const weekMap: Record<string, number> = {};
     completedDates.forEach((dateStr) => {
         const d = new Date(dateStr);
         const day = d.getDay();
         const monday = new Date(d);
         monday.setDate(d.getDate() - ((day + 6) % 7));
-        const weekKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
-        weekMap[weekKey] = (weekMap[weekKey] || 0) + 1;
+        const key = fmt(monday);
+        weekMap[key] = (weekMap[key] || 0) + 1;
     });
-
     const today = new Date();
     const todayDay = today.getDay();
     const thisMonday = new Date(today);
     thisMonday.setDate(today.getDate() - ((todayDay + 6) % 7));
-
     let checkMonday = new Date(thisMonday);
-    let currentStreak = 0;
+    let streak = 0;
     while (true) {
-        const weekKey = `${checkMonday.getFullYear()}-${String(checkMonday.getMonth() + 1).padStart(2, '0')}-${String(checkMonday.getDate()).padStart(2, '0')}`;
-        if (weekMap[weekKey] >= commitment) {
-            currentStreak++;
-            checkMonday.setDate(checkMonday.getDate() - 7);
-        } else {
-            break;
-        }
+        const key = fmt(checkMonday);
+        if ((weekMap[key] || 0) >= commitment) { streak++; checkMonday.setDate(checkMonday.getDate() - 7); }
+        else break;
     }
-    return { current: currentStreak, max: 0 };
+    return streak;
 };
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DAYNAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 export default function HabitDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const [habit, setHabit] = useState<Habit | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    const [viewMonth, setViewMonth] = useState(new Date().getMonth());
+    const [viewYear, setViewYear] = useState(new Date().getFullYear());
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [journalText, setJournalText] = useState('');
-    const [editMode, setEditMode] = useState(false);
-    const [monthDropdown, setMonthDropdown] = useState(false);
-    const [yearDropdown, setYearDropdown] = useState(false);
-    const { width } = useWindowDimensions();
-    const isWide = width > 700;
-
-    const today = getTodayString();
-    const todayDate = new Date();
-    const [viewMonth, setViewMonth] = useState(todayDate.getMonth());
-    const [viewYear, setViewYear] = useState(todayDate.getFullYear());
 
     useEffect(() => {
         if (!id) return;
         const unsub = onSnapshot(doc(db, 'habits', id), (snap) => {
-            if (snap.exists()) {
-                setHabit({ id: snap.id, ...(snap.data() as Omit<Habit, 'id'>) });
-            }
+            if (snap.exists()) setHabit({ id: snap.id, ...(snap.data() as Omit<Habit, 'id'>) });
+            setLoading(false);
         });
-        return unsub;
+        return () => unsub();
     }, [id]);
 
-    const saveJournal = async () => {
-        if (!habit || !journalText.trim() || !selectedDate) {
-            alert('Please write something!');
-            return;
-        }
-        const dates = habit.completedDates || [];
-        const newDates = dates.includes(selectedDate) ? dates : [...dates, selectedDate];
-        await updateDoc(doc(db, 'habits', habit.id), {
-            completedDates: newDates, completed: true,
-            journals: { ...(habit.journals || {}), [selectedDate]: journalText.trim() },
-        });
-        setEditMode(false);
-        setJournalText('');
+    if (loading) {
+        return <View style={[styles.container, { justifyContent: 'center' }]}><ActivityIndicator size="large" color={ACCENT} /></View>;
+    }
+    if (!habit) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={styles.emptyText}>Habit not found.</Text>
+                <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}><Text style={styles.backText}>← Back</Text></TouchableOpacity>
+            </View>
+        );
+    }
+
+    const commitment = habit.commitment ?? 1;
+    const isNoCommitment = commitment === 0;
+    const completedDates = habit.completedDates || [];
+    const journals = habit.journals || {};
+    const streak = getWeekStreak(completedDates, commitment);
+    const totalDone = completedDates.length;
+
+    const todayStr = fmt(new Date());
+
+    const openDay = (dateStr: string) => {
+        setSelectedDate(dateStr);
+        setJournalText(journals[dateStr] || '');
     };
 
-    const markAsUndone = async (date: string) => {
-        if (!habit) return;
-        const newDates = (habit.completedDates || []).filter((d) => d !== date);
-        const journals = { ...(habit.journals || {}) };
-        delete journals[date];
+    const toggleDone = async () => {
+        if (!selectedDate) return;
+        const isDone = completedDates.includes(selectedDate);
         await updateDoc(doc(db, 'habits', habit.id), {
-            completedDates: newDates, completed: newDates.includes(today), journals,
+            completedDates: isDone ? arrayRemove(selectedDate) : arrayUnion(selectedDate),
         });
+    };
+
+    const saveJournal = async () => {
+        if (!selectedDate) return;
+        await setDoc(doc(db, 'habits', habit.id), {
+            journals: { ...journals, [selectedDate]: journalText.trim() },
+        }, { merge: true });
+        Alert.alert('Saved', 'Your note has been saved.');
         setSelectedDate(null);
     };
 
-    const handleDatePress = (dateStr: string) => {
-        if (dateStr > today) return;
-        setSelectedDate(dateStr);
-        setEditMode(false);
-        setJournalText('');
-        setMonthDropdown(false);
-        setYearDropdown(false);
+    // Calendar grid
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const cells: (string | null)[] = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(fmt(new Date(viewYear, viewMonth, d)));
+
+    const prevMonth = () => {
+        if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
+        else setViewMonth(viewMonth - 1);
     };
-
-    const getAvailableYears = () => {
-        if (!habit) return [todayDate.getFullYear()];
-        let startYear = todayDate.getFullYear();
-        if (habit.createdAt?.toDate) startYear = habit.createdAt.toDate().getFullYear();
-        const years = [];
-        for (let y = startYear; y <= todayDate.getFullYear(); y++) years.push(y);
-        return years;
+    const nextMonth = () => {
+        if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
+        else setViewMonth(viewMonth + 1);
     };
-
-    const renderCalendar = () => {
-        const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-        const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-        const completedDates = habit?.completedDates || [];
-        const cells = [];
-
-        for (let i = 0; i < firstDay; i++) {
-            cells.push(<View key={`e${i}`} style={styles.dayCell} />);
-        }
-
-        for (let d = 1; d <= daysInMonth; d++) {
-            const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-            const done = completedDates.includes(dateStr);
-            const isToday = dateStr === today;
-            const isFuture = dateStr > today;
-            const isSelected = dateStr === selectedDate;
-
-            cells.push(
-                <TouchableOpacity
-                    key={dateStr}
-                    style={[styles.dayCell, done && styles.dayCellDone, isToday && styles.dayCellToday, isSelected && styles.dayCellSelected]}
-                    onPress={() => handleDatePress(dateStr)}
-                    disabled={isFuture}
-                >
-                    <Text style={[styles.dayNumber, done && styles.dayNumberDone, isToday && styles.dayNumberToday, isFuture && styles.dayNumberFuture, isSelected && styles.dayNumberSelected]}>
-                        {d}
-                    </Text>
-                </TouchableOpacity>
-            );
-        }
-        return cells;
-    };
-
-    if (!habit) return (
-        <View style={styles.container}>
-            <Text style={{ padding: 24, marginTop: 60 }}>Loading...</Text>
-        </View>
-    );
-
-    const weekDates = getWeekDates();
-    const commitment = habit.commitment ?? 1;          // use ?? so 0 (no commitment) stays 0
-    const isNoCommitment = commitment === 0;
-    const { current: currentStreak } = getWeekStreak(habit.completedDates || [], commitment);
-    const doneThisWeek = weekDates.filter((d) => (habit.completedDates || []).includes(d)).length;
-    const commitmentMet = commitment > 0 && doneThisWeek >= commitment;
-    const totalDone = (habit.completedDates || []).length;
-    const journalEntries = Object.entries(habit.journals || {}).sort((a, b) => b[0].localeCompare(a[0]));
-    const years = getAvailableYears();
-    const selectedDone = selectedDate ? (habit.completedDates || []).includes(selectedDate) : false;
-    const selectedJournal = selectedDate ? habit.journals?.[selectedDate] : null;
-
-    const calendarPanel = (
-        <View style={[styles.calendarBox, isWide && { marginHorizontal: 0 }]}>
-            <View style={styles.calendarHeader}>
-                <TouchableOpacity style={styles.dropdownBtn} onPress={() => { setMonthDropdown(!monthDropdown); setYearDropdown(false); }}>
-                    <Text style={styles.dropdownBtnText}>{MONTH_NAMES[viewMonth].slice(0, 3)} ▾</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.dropdownBtn} onPress={() => { setYearDropdown(!yearDropdown); setMonthDropdown(false); }}>
-                    <Text style={styles.dropdownBtnText}>{viewYear} ▾</Text>
-                </TouchableOpacity>
-            </View>
-
-            {monthDropdown && (
-                <View style={styles.dropdownList}>
-                    {MONTH_NAMES.map((m, i) => (
-                        <TouchableOpacity key={m} style={styles.dropdownItem} onPress={() => { setViewMonth(i); setMonthDropdown(false); }}>
-                            <Text style={[styles.dropdownItemText, viewMonth === i && styles.dropdownItemActive]}>{m}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            )}
-
-            {yearDropdown && (
-                <View style={styles.dropdownList}>
-                    {years.map((y) => (
-                        <TouchableOpacity key={y} style={styles.dropdownItem} onPress={() => { setViewYear(y); setYearDropdown(false); }}>
-                            <Text style={[styles.dropdownItemText, viewYear === y && styles.dropdownItemActive]}>{y}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            )}
-
-            <View style={styles.dayNamesRow}>
-                {DAY_NAMES.map((d, i) => <Text key={i} style={styles.dayNameText}>{d}</Text>)}
-            </View>
-            <View style={styles.daysGrid}>{renderCalendar()}</View>
-        </View>
-    );
-
-    const journalPanel = (
-        <View style={[styles.journalPanel, isWide && styles.journalPanelWide]}>
-            {!selectedDate ? (
-                <Text style={styles.journalPanelEmpty}>Tap a date to view or add journal</Text>
-            ) : (
-                <>
-                    <Text style={styles.journalPanelDate}>📅 {selectedDate}</Text>
-                    {selectedDone && !editMode ? (
-                        <>
-                            <View style={styles.journalViewBox}>
-                                <Text style={styles.journalViewText}>{selectedJournal || 'No journal written.'}</Text>
-                            </View>
-                            <TouchableOpacity style={styles.editBtn} onPress={() => { setEditMode(true); setJournalText(selectedJournal || ''); }}>
-                                <Text style={styles.editBtnText}>✏️ Edit Journal</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.undoneBtn} onPress={() => markAsUndone(selectedDate)}>
-                                <Text style={styles.undoneBtnText}>↩️ Mark as Not Done</Text>
-                            </TouchableOpacity>
-                        </>
-                    ) : (
-                        <>
-                            <TextInput
-                                style={styles.journalInput}
-                                placeholder="Write about your session..."
-                                value={journalText}
-                                onChangeText={setJournalText}
-                                multiline
-                                numberOfLines={4}
-                            />
-                            <TouchableOpacity style={styles.saveButton} onPress={saveJournal}>
-                                <Text style={styles.saveButtonText}>{selectedDone ? 'Save Changes' : 'Mark as Done ✅'}</Text>
-                            </TouchableOpacity>
-                            {editMode && (
-                                <TouchableOpacity style={styles.cancelEditBtn} onPress={() => { setEditMode(false); setJournalText(''); }}>
-                                    <Text style={styles.cancelEditBtnText}>Cancel</Text>
-                                </TouchableOpacity>
-                            )}
-                        </>
-                    )}
-                </>
-            )}
-        </View>
-    );
 
     return (
-        <ScrollView style={styles.container}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                <Text style={styles.backText}>← Back</Text>
-            </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+            <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => router.back()}>
+                        <Text style={styles.backText}>← Back</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle} numberOfLines={1}>{habit.name}</Text>
+                    <View style={{ width: 50 }} />
+                </View>
 
-            <Text style={styles.title}>{habit.name}</Text>
-            {/* Show commitment OR "no goal" label + colored fire streak */}
-            {isNoCommitment ? (
-                <View style={styles.subtitleRow}>
-                    <Text style={styles.commitment}>✨ Just do it (no set goal)</Text>
-                    <Text style={styles.streakRed}>🔥 {totalDone}x total</Text>
-                </View>
-            ) : (
-                <View style={styles.subtitleRow}>
-                    <Text style={styles.commitment}>🎯 {commitment}x per week</Text>
-                    <Text style={styles.streakPurple}>🔥 {currentStreak} week(s) streak</Text>
-                </View>
-            )}
-
-            {/* Stats */}
-            <View style={styles.statsRow}>
-                <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>{totalDone}</Text>
-                    <Text style={styles.statLabel}>Total Done</Text>
-                </View>
-                {/* "This Week" stat changes meaning for no-commitment habits */}
-                {isNoCommitment ? (
-                    <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>{doneThisWeek}</Text>
-                        <Text style={styles.statLabel}>This Week</Text>
-                    </View>
-                ) : (
-                    <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>{doneThisWeek}/{commitment}</Text>
-                        <Text style={styles.statLabel}>This Week</Text>
-                    </View>
-                )}
-                <View style={styles.statBox}>
-                    <Text style={styles.statNumber}>{journalEntries.length}</Text>
-                    <Text style={styles.statLabel}>Journals</Text>
-                </View>
-            </View>
-
-            {/* This week */}
-            <View style={[styles.card, commitmentMet && styles.cardDone]}>
-                <View style={styles.weekHeader}>
-                    <Text style={styles.cardTitle}>This Week</Text>
+                {/* Streak summary */}
+                <View style={styles.summaryCard}>
+                    <Text style={styles.habitTitle}>{habit.name}</Text>
                     {isNoCommitment ? (
-                        <Text style={styles.weekProgress}>{doneThisWeek} this week</Text>
+                        <>
+                            <Text style={styles.subtitle}>✨ Just do it (no set goal)</Text>
+                            <Text style={styles.streakRed}>🔥 {totalDone}x done total</Text>
+                        </>
                     ) : (
-                        <Text style={[styles.weekProgress, commitmentMet && styles.weekProgressDone]}>
-                            {doneThisWeek}/{commitment} done
-                        </Text>
+                        <>
+                            <Text style={styles.subtitle}>🎯 {commitment}x per week</Text>
+                            <Text style={styles.streakPurple}>🔥 {streak} week(s) streak</Text>
+                        </>
                     )}
                 </View>
-                <View style={styles.weekRow}>
-                    {weekDates.map((date, i) => {
-                        const done = (habit.completedDates || []).includes(date);
-                        return (
-                            <View key={date} style={styles.weekDayCol}>
-                                <View style={[styles.weekCircle, done && styles.weekCircleDone]}>
-                                    <Text style={[styles.weekCircleText, done && styles.weekCircleTextDone]}>{WEEK_DAYS[i]}</Text>
-                                </View>
-                            </View>
-                        );
-                    })}
-                </View>
-            </View>
 
-            {/* Calendar + Journal */}
-            {isWide ? (
-                <View style={styles.wideLayout}>
-                    {calendarPanel}
-                    {journalPanel}
+                {/* Calendar */}
+                <View style={styles.calendarCard}>
+                    <View style={styles.calHeader}>
+                        <TouchableOpacity onPress={prevMonth} style={styles.calNav}><Text style={styles.calNavText}>‹</Text></TouchableOpacity>
+                        <Text style={styles.calMonth}>{MONTHS[viewMonth]} {viewYear}</Text>
+                        <TouchableOpacity onPress={nextMonth} style={styles.calNav}><Text style={styles.calNavText}>›</Text></TouchableOpacity>
+                    </View>
+
+                    <View style={styles.dayNamesRow}>
+                        {DAYNAMES.map((d) => <Text key={d} style={styles.dayNameText}>{d}</Text>)}
+                    </View>
+
+                    <View style={styles.calGrid}>
+                        {cells.map((dateStr, i) => {
+                            if (!dateStr) return <View key={`e${i}`} style={styles.calCell} />;
+                            const done = completedDates.includes(dateStr);
+                            const hasJournal = !!journals[dateStr];
+                            const isToday = dateStr === todayStr;
+                            const isFuture = dateStr > todayStr;
+                            const dayNum = parseInt(dateStr.split('-')[2], 10);
+                            return (
+                                <TouchableOpacity
+                                    key={dateStr}
+                                    style={styles.calCell}
+                                    disabled={isFuture}
+                                    onPress={() => openDay(dateStr)}
+                                >
+                                    <View style={[styles.calDay, done && styles.calDayDone, isToday && !done && styles.calDayToday, isFuture && styles.calDayFuture]}>
+                                        <Text style={[styles.calDayText, done && styles.calDayTextDone, isFuture && styles.calDayTextFuture]}>{dayNum}</Text>
+                                        {hasJournal && <View style={[styles.journalDot, done && { backgroundColor: '#fff' }]} />}
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                    <Text style={styles.calHint}>Tap a day to mark it done or add a note.</Text>
                 </View>
-            ) : (
-                <View style={styles.narrowLayout}>
-                    {calendarPanel}
-                    {journalPanel}
+            </ScrollView>
+
+            {/* Day editor */}
+            {selectedDate && (
+                <View style={styles.editorOverlay}>
+                    <TouchableOpacity style={styles.editorBackdrop} activeOpacity={1} onPress={() => setSelectedDate(null)} />
+                    <View style={styles.editorSheet}>
+                        <View style={styles.editorHandle} />
+                        <Text style={styles.editorDate}>{selectedDate}</Text>
+
+                        <TouchableOpacity
+                            style={[styles.doneButton, completedDates.includes(selectedDate) && styles.doneButtonActive]}
+                            onPress={toggleDone}
+                        >
+                            <Text style={[styles.doneButtonText, completedDates.includes(selectedDate) && styles.doneButtonTextActive]}>
+                                {completedDates.includes(selectedDate) ? '✓ Done' : 'Mark as Done'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <Text style={styles.editorLabel}>Note / Journal</Text>
+                        <TextInput
+                            style={styles.journalInput}
+                            value={journalText}
+                            onChangeText={setJournalText}
+                            placeholder="How did it go?"
+                            placeholderTextColor={MUTED}
+                            multiline
+                        />
+
+                        <TouchableOpacity style={styles.saveButton} onPress={saveJournal}>
+                            <Text style={styles.saveButtonText}>Save</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.closeButton} onPress={() => setSelectedDate(null)}>
+                            <Text style={styles.closeButtonText}>Close</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             )}
-
-            {/* All journal entries */}
-            {journalEntries.length > 0 && (
-                <>
-                    <Text style={styles.sectionTitle}>All Entries</Text>
-                    {journalEntries.map(([date, text]) => (
-                        <View key={date} style={styles.journalCard}>
-                            <Text style={styles.journalCardHabit}>{habit.name}</Text>
-                            <Text style={styles.journalCardDate}>📅 {date}</Text>
-                            <Text style={styles.journalCardText}>{text}</Text>
-                        </View>
-                    ))}
-                </>
-            )}
-
-            <View style={{ height: 40 }} />
-        </ScrollView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
-    backButton: { marginTop: 60, marginLeft: 16, marginBottom: 8 },
-    backText: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
-    title: { fontSize: 26, fontWeight: 'bold', paddingHorizontal: 16, marginBottom: 4 },
-    commitment: { fontSize: 13, color: '#888' },
-    subtitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
-    streakPurple: { fontSize: 13, color: '#8E24AA', fontWeight: '700' },
-    streakRed: { fontSize: 13, color: '#E53935', fontWeight: '700' },
-    statsRow: { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, padding: 12, marginBottom: 12, justifyContent: 'space-around' },
-    statBox: { alignItems: 'center' },
-    statNumber: { fontSize: 20, fontWeight: 'bold', color: '#4CAF50' },
-    statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
-    card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 12 },
-    cardDone: { backgroundColor: '#f0fff0', borderWidth: 1.5, borderColor: '#4CAF50' },
-    cardTitle: { fontSize: 14, fontWeight: 'bold', color: '#333' },
-    weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    weekProgress: { fontSize: 12, color: '#888' },
-    weekProgressDone: { color: '#4CAF50', fontWeight: 'bold' },
-    weekRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    weekDayCol: { alignItems: 'center' },
-    weekCircle: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
-    weekCircleDone: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
-    weekCircleText: { fontSize: 11, color: '#aaa', fontWeight: '600' },
-    weekCircleTextDone: { color: '#fff' },
-    wideLayout: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, gap: 12, marginBottom: 12 },
-    narrowLayout: { paddingHorizontal: 0, marginBottom: 12 },
-    calendarBox: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 12, width: 280 },
-    calendarHeader: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-    dropdownBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#eee', backgroundColor: '#fafafa' },
-    dropdownBtnText: { fontSize: 12, fontWeight: '600', color: '#333' },
-    dropdownList: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#eee', marginBottom: 8, maxHeight: 160, overflow: 'hidden' },
-    dropdownItem: { padding: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
-    dropdownItemText: { fontSize: 12, color: '#333' },
-    dropdownItemActive: { color: '#4CAF50', fontWeight: 'bold' },
-    dayNamesRow: { flexDirection: 'row', marginBottom: 4 },
-    dayNameText: { width: 32, textAlign: 'center', fontSize: 10, color: '#aaa', fontWeight: '600' },
-    daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-    dayCell: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center', borderRadius: 4 },
-    dayCellDone: { backgroundColor: '#e0f7e0' },
-    dayCellToday: { borderWidth: 1.5, borderColor: '#4CAF50' },
-    dayCellSelected: { backgroundColor: '#4CAF50' },
-    dayNumber: { fontSize: 11, color: '#333' },
-    dayNumberDone: { color: '#4CAF50', fontWeight: 'bold' },
-    dayNumberToday: { color: '#4CAF50', fontWeight: 'bold' },
-    dayNumberFuture: { color: '#ddd' },
-    dayNumberSelected: { color: '#fff', fontWeight: 'bold' },
-    journalPanel: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 12 },
-    journalPanelWide: { flex: 1, marginHorizontal: 0 },
-    journalPanelEmpty: { color: '#aaa', fontSize: 13, textAlign: 'center', paddingVertical: 20 },
-    journalPanelDate: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 12 },
-    journalViewBox: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 12, marginBottom: 12 },
-    journalViewText: { fontSize: 14, color: '#333', lineHeight: 20 },
-    editBtn: { backgroundColor: '#f0f0f0', padding: 10, borderRadius: 8, alignItems: 'center', marginBottom: 8 },
-    editBtnText: { fontSize: 13, color: '#333', fontWeight: '600' },
-    undoneBtn: { padding: 10, alignItems: 'center' },
-    undoneBtnText: { fontSize: 13, color: '#ff4444' },
-    journalInput: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 12, fontSize: 14, backgroundColor: '#fafafa', marginBottom: 12, minHeight: 80, textAlignVertical: 'top' },
-    saveButton: { backgroundColor: '#4CAF50', padding: 12, borderRadius: 10, alignItems: 'center', marginBottom: 8 },
-    saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-    cancelEditBtn: { padding: 10, alignItems: 'center' },
-    cancelEditBtnText: { color: '#888', fontSize: 13 },
-    sectionTitle: { fontSize: 16, fontWeight: 'bold', paddingHorizontal: 16, marginBottom: 10, marginTop: 4 },
-    journalCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginHorizontal: 16, marginBottom: 10 },
-    journalCardHabit: { fontSize: 12, fontWeight: 'bold', color: '#4CAF50', marginBottom: 2 },
-    journalCardDate: { fontSize: 11, color: '#aaa', marginBottom: 8 },
-    journalCardText: { fontSize: 14, color: '#333', lineHeight: 20 },
+    container: { flex: 1, backgroundColor: PAPER },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: PAPER, borderBottomWidth: 0.5, borderBottomColor: LINE },
+    backText: { color: ACCENT, fontSize: 16, fontWeight: '600', width: 50 },
+    headerTitle: { fontSize: 17, fontFamily: SERIF, color: INK, flex: 1, textAlign: 'center' },
+    emptyText: { fontSize: 15, color: MUTED },
+    summaryCard: { backgroundColor: SURFACE, margin: 16, borderRadius: 14, padding: 20, alignItems: 'center', borderWidth: 0.5, borderColor: LINE },
+    habitTitle: { fontSize: 22, fontFamily: SERIF, color: INK, marginBottom: 8, textAlign: 'center' },
+    subtitle: { fontSize: 14, color: MUTED, marginBottom: 8 },
+    streakPurple: { fontSize: 17, color: '#8E24AA', fontWeight: '700' },
+    streakRed: { fontSize: 17, color: '#E53935', fontWeight: '700' },
+    calendarCard: { backgroundColor: SURFACE, marginHorizontal: 16, borderRadius: 14, padding: 16, borderWidth: 0.5, borderColor: LINE },
+    calHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    calNav: { padding: 8, paddingHorizontal: 16 },
+    calNavText: { fontSize: 26, color: ACCENT, fontWeight: '600' },
+    calMonth: { fontSize: 16, fontWeight: '600', color: INK },
+    dayNamesRow: { flexDirection: 'row', marginBottom: 8 },
+    dayNameText: { flex: 1, textAlign: 'center', fontSize: 11, color: MUTED, fontWeight: '600' },
+    calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+    calCell: { width: `${100 / 7}%`, aspectRatio: 1, justifyContent: 'center', alignItems: 'center', padding: 2 },
+    calDay: { width: '100%', height: '100%', borderRadius: 10, justifyContent: 'center', alignItems: 'center', maxWidth: 44, maxHeight: 44 },
+    calDayDone: { backgroundColor: ACCENT },
+    calDayToday: { borderWidth: 1.5, borderColor: ACCENT },
+    calDayFuture: { opacity: 0.35 },
+    calDayText: { fontSize: 14, color: INK },
+    calDayTextDone: { color: '#fff', fontWeight: '700' },
+    calDayTextFuture: { color: MUTED },
+    journalDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: ACCENT, marginTop: 2 },
+    calHint: { fontSize: 12, color: MUTED, textAlign: 'center', marginTop: 14 },
+    editorOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' },
+    editorBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+    editorSheet: { backgroundColor: SURFACE, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, paddingBottom: 36 },
+    editorHandle: { width: 44, height: 5, borderRadius: 999, backgroundColor: '#ddd', alignSelf: 'center', marginBottom: 16 },
+    editorDate: { fontSize: 17, fontFamily: SERIF, color: INK, textAlign: 'center', marginBottom: 16 },
+    doneButton: { borderWidth: 1, borderColor: ACCENT, borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginBottom: 20 },
+    doneButtonActive: { backgroundColor: ACCENT },
+    doneButtonText: { color: ACCENT, fontWeight: '700', fontSize: 15 },
+    doneButtonTextActive: { color: '#fff' },
+    editorLabel: { fontSize: 12, fontWeight: '600', color: MUTED, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+    journalInput: { backgroundColor: PAPER, borderWidth: 0.5, borderColor: LINE, borderRadius: 10, padding: 12, fontSize: 15, color: INK, minHeight: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
+    saveButton: { backgroundColor: ACCENT, borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
+    saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+    closeButton: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },
+    closeButtonText: { color: MUTED, fontSize: 15 },
 });

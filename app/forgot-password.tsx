@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 8, color: '#000' }, // tambah color
   subtitle: { fontSize: 16, textAlign: 'center', color: '#888', marginBottom: 32 },
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16, color: '#000' }, // tambah color
-  button: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 8, alignItems: 'center' },
+  button: { backgroundColor: '#C17F3F', padding: 14, borderRadius: 8, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   back: { textAlign: 'center', marginTop: 16, color: '#888' },
 });

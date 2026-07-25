@@ -1,9 +1,20 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
+
+// Serif display font for names/titles — uses the OS built-in serif so no font install is needed.
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }) as string;
+
+// Design tokens (minimalist: warm paper, ink text, one terracotta accent)
+const ACCENT = '#C1440E';
+const INK = '#1A1A1A';
+const MUTED = '#9A968E';
+const LINE = '#EAE8E2';
+const PAPER = '#FBFAF8';
+const SURFACE = '#FFFFFF';
 
 type Habit = {
     id: string;
@@ -132,60 +143,56 @@ export default function ProfileScreen() {
     const { width: winWidth } = useWindowDimensions();
     const gridSize = Math.floor((winWidth - 4) / 3);
 
-    useFocusEffect(
-        useCallback(() => {
-            let unsubscribeHabits: (() => void) | undefined;
-            let unsubscribeUser: (() => void) | undefined;
-            const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-                if (!user) return;
-                unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
-                    if (userDoc.exists()) {
-                        const data = userDoc.data();
-                        setDisplayName(data.displayName || '');
-                        setUsername(data.username || '');
-                        setBio(data.bio || '');
-                        setPhotoUrl(data.photoUrl || '');
-                    }
-                });
-                const q = query(collection(db, 'habits'), where('userId', '==', user.uid));
-                unsubscribeHabits = onSnapshot(q, (snapshot) => {
-                    const loaded = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Habit, 'id'>) }));
-                    loaded.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-                    setHabits(loaded);
-                });
+    useEffect(() => {
+        let unsubscribeHabits: (() => void) | undefined;
+        let unsubscribeUser: (() => void) | undefined;
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+            if (!user) return;
+            unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    setDisplayName(data.displayName || '');
+                    setUsername(data.username || '');
+                    setBio(data.bio || '');
+                    setPhotoUrl(data.photoUrl || '');
+                }
             });
-            return () => {
-                unsubscribeAuth();
-                if (unsubscribeHabits) unsubscribeHabits();
-                if (unsubscribeUser) unsubscribeUser();
-            };
-        }, [])
-    );
+            const q = query(collection(db, 'habits'), where('userId', '==', user.uid));
+            unsubscribeHabits = onSnapshot(q, (snapshot) => {
+                const loaded = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Habit, 'id'>) }));
+                loaded.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+                setHabits(loaded);
+            });
+        });
+        return () => {
+            unsubscribeAuth();
+            if (unsubscribeHabits) unsubscribeHabits();
+            if (unsubscribeUser) unsubscribeUser();
+        };
+    }, []);
 
     // Listen to my followers / following / pending-request counts
-    useFocusEffect(
-        useCallback(() => {
-            let unsubs: (() => void)[] = [];
-            const unsubAuth = onAuthStateChanged(auth, (user) => {
-                if (!user) return;
-                unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followers'), (s) => setFollowersCount(s.size)));
-                unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'following'), (s) => setFollowingCount(s.size)));
-                unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followRequests'), (s) => setPendingCount(s.size)));
-                // My posts (sorted client-side to avoid needing a composite index)
-                const pq = query(collection(db, 'posts'), where('userId', '==', user.uid));
-                unsubs.push(onSnapshot(pq, (snap) => {
-                    const list = snap.docs
-                        .map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }))
-                        .filter((p) => hasPhoto(p.imageUrl));
-                    list.sort((a, b) => {
-                        return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-                    });
-                    setPosts(list);
-                }));
-            });
-            return () => { unsubAuth(); unsubs.forEach((u) => u()); };
-        }, [])
-    );
+    useEffect(() => {
+        let unsubs: (() => void)[] = [];
+        const unsubAuth = onAuthStateChanged(auth, (user) => {
+            if (!user) return;
+            unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followers'), (s) => setFollowersCount(s.size)));
+            unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'following'), (s) => setFollowingCount(s.size)));
+            unsubs.push(onSnapshot(collection(db, 'users', user.uid, 'followRequests'), (s) => setPendingCount(s.size)));
+            // My posts (sorted client-side to avoid needing a composite index)
+            const pq = query(collection(db, 'posts'), where('userId', '==', user.uid));
+            unsubs.push(onSnapshot(pq, (snap) => {
+                const list = snap.docs
+                    .map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }))
+                    .filter((p) => hasPhoto(p.imageUrl));
+                list.sort((a, b) => {
+                    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+                });
+                setPosts(list);
+            }));
+        });
+        return () => { unsubAuth(); unsubs.forEach((u) => u()); };
+    }, []);
 
     const handleLogout = async () => {
         setMenuVisible(false);
@@ -313,9 +320,9 @@ export default function ProfileScreen() {
                     {topStreaks.length > 0 && (
                         <View style={styles.streakWrap}>
                             {topStreaks.map((sk) => (
-                                <View key={sk.name} style={[styles.streakChip, sk.lit ? styles.streakChipLit : styles.streakChipCold]}>
-                                    <Text style={[styles.fire, !sk.lit && styles.fireCold]}>🔥</Text>
-                                    <Text style={[styles.streakLabel, sk.lit ? styles.streakLabelLit : styles.streakLabelCold]}>
+                                <View key={sk.name} style={styles.streakChip}>
+                                    <Text style={styles.fire}>🔥</Text>
+                                    <Text style={styles.streakLabel}>
                                         {sk.name} · {sk.weeks}w
                                     </Text>
                                 </View>
@@ -341,7 +348,7 @@ export default function ProfileScreen() {
                     {/* Follow Requests button */}
                     <TouchableOpacity style={[styles.requestsButton, pendingCount > 0 && styles.requestsButtonActive]} onPress={() => router.push('/follow-requests')}>
                         <Text style={[styles.requestsButtonText, pendingCount > 0 && styles.requestsButtonTextActive]}>
-                            👥 Follow Requests{pendingCount > 0 ? ` (${pendingCount})` : ''}
+                            Follow Requests{pendingCount > 0 ? ` (${pendingCount})` : ''}
                         </Text>
                     </TouchableOpacity>
 
@@ -356,24 +363,24 @@ export default function ProfileScreen() {
                         <Text style={styles.statNumber}>{habits.length}</Text>
                         <Text style={styles.statLabel}>Habits</Text>
                     </View>
-                    <View style={styles.statBox}>
+                    <View style={[styles.statBox, styles.statBoxMiddle]}>
                         <Text style={styles.statNumber}>{photoPostCount}</Text>
                         <Text style={styles.statLabel}>Posts</Text>
                     </View>
                     <View style={styles.statBox}>
                         <Text style={styles.statNumber}>{totalDoneCount}</Text>
-                        <Text style={styles.statLabel}>Total Done</Text>
+                        <Text style={styles.statLabel}>Done</Text>
                     </View>
                 </View>
 
-                {/* Tab switcher: Habits | Posts */}
+                {/* Tab switcher: Posts | Habits */}
                 <View style={styles.tabRow}>
                     <TouchableOpacity
                         style={[styles.tabBtn, activeTab === 'posts' && styles.tabBtnActive]}
                         onPress={() => setActiveTab('posts')}
                     >
                         <Text style={[styles.tabText, activeTab === 'posts' && styles.tabTextActive]}>
-                            ▦ Posts {posts.length > 0 ? `(${posts.length})` : ''}
+                            Posts {posts.length > 0 ? `(${posts.length})` : ''}
                         </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -381,7 +388,7 @@ export default function ProfileScreen() {
                         onPress={() => setActiveTab('habits')}
                     >
                         <Text style={[styles.tabText, activeTab === 'habits' && styles.tabTextActive]}>
-                            🎯 Habits
+                            Habits
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -696,118 +703,114 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
-    header: { alignItems: 'center', paddingTop: 60, paddingBottom: 24, backgroundColor: '#fff' },
-    avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-    avatarText: { fontSize: 32, color: '#fff', fontWeight: 'bold' },
-    name: { fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
-    username: { fontSize: 15, color: '#888' },
-    bio: { fontSize: 14, color: '#555', textAlign: 'center', marginTop: 8, paddingHorizontal: 32, lineHeight: 20 },
-    editButton: { marginTop: 16, borderWidth: 1, borderColor: '#4CAF50', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 32 },
-    editButtonText: { color: '#4CAF50', fontWeight: '600', fontSize: 14 },
-    followRow: { flexDirection: 'row', gap: 24, marginTop: 14 },
-    followItem: { fontSize: 14, color: '#555' },
-    followNum: { fontWeight: 'bold', color: '#333' },
-    requestsButton: { marginTop: 12, backgroundColor: '#f0f0f0', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 },
-    requestsButtonActive: { backgroundColor: '#4CAF50' },
-    requestsButtonText: { color: '#333', fontWeight: '600', fontSize: 13 },
+    container: { flex: 1, backgroundColor: PAPER },
+    header: { alignItems: 'center', paddingTop: 60, paddingBottom: 24, backgroundColor: PAPER },
+    avatar: { width: 84, height: 84, borderRadius: 20, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+    avatarText: { fontSize: 34, color: '#fff', fontFamily: SERIF },
+    name: { fontSize: 27, color: INK, fontFamily: SERIF, letterSpacing: -0.3 },
+    username: { fontSize: 14, color: MUTED, marginTop: 3 },
+    bio: { fontSize: 14, color: '#6B6B6B', textAlign: 'center', marginTop: 10, paddingHorizontal: 40, lineHeight: 20 },
+    editButton: { marginTop: 18, borderWidth: 1, borderColor: ACCENT, borderRadius: 8, paddingVertical: 9, paddingHorizontal: 36 },
+    editButtonText: { color: ACCENT, fontWeight: '600', fontSize: 13, letterSpacing: 0.2 },
+    followRow: { flexDirection: 'row', gap: 28, marginTop: 16 },
+    followItem: { fontSize: 14, color: MUTED },
+    followNum: { fontWeight: '700', color: INK },
+    requestsButton: { marginTop: 14, borderWidth: 1, borderColor: LINE, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 },
+    requestsButtonActive: { backgroundColor: ACCENT, borderColor: ACCENT },
+    requestsButtonText: { color: '#6B6B6B', fontWeight: '600', fontSize: 12, letterSpacing: 0.3 },
     requestsButtonTextActive: { color: '#fff' },
     menuButton: { position: 'absolute', top: 60, right: 20, padding: 8 },
-    menuDots: { fontSize: 24, color: '#333', fontWeight: 'bold' },
-    statsRow: { flexDirection: 'row', backgroundColor: '#fff', marginTop: 12, padding: 16, justifyContent: 'space-around' },
+    menuDots: { fontSize: 24, color: INK, fontWeight: 'bold' },
+    statsRow: { flexDirection: 'row', backgroundColor: PAPER, marginTop: 20, paddingVertical: 18, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: LINE },
     statBox: { alignItems: 'center', flex: 1, paddingHorizontal: 4 },
-    statNumber: { fontSize: 18, fontWeight: 'bold', color: '#4CAF50', textAlign: 'center' },
-    statLabel: { fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center' },
+    statBoxMiddle: { borderLeftWidth: 0.5, borderRightWidth: 0.5, borderColor: LINE },
+    statNumber: { fontSize: 25, fontWeight: '700', color: INK, textAlign: 'center', letterSpacing: -0.5 },
+    statLabel: { fontSize: 10, color: MUTED, marginTop: 5, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },
     sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 12, paddingHorizontal: 16 },
-    streakWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 16, marginTop: 12, marginBottom: 4 },
-    streakChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14 },
-    streakChipLit: { backgroundColor: '#FFF3E0' },
-    streakChipCold: { backgroundColor: '#f0f0f0' },
+    streakWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', paddingHorizontal: 16, marginTop: 14, marginBottom: 2 },
+    streakChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999, borderWidth: 0.5, borderColor: ACCENT },
     fire: { fontSize: 12, marginRight: 4 },
-    fireCold: { opacity: 0.3 },
-    streakLabel: { fontSize: 11, fontWeight: '600' },
-    streakLabelLit: { color: '#E53935' },
-    streakLabelCold: { color: '#999' },
-    tabRow: { flexDirection: 'row', backgroundColor: '#fff', marginTop: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    tabBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-    tabBtnActive: { borderBottomColor: '#4CAF50' },
-    tabText: { fontSize: 14, color: '#888', fontWeight: '600' },
-    tabTextActive: { color: '#4CAF50' },
+    streakLabel: { fontSize: 11, fontWeight: '600', color: ACCENT },
+    tabRow: { flexDirection: 'row', backgroundColor: PAPER, marginTop: 4, borderBottomWidth: 0.5, borderBottomColor: LINE },
+    tabBtn: { flex: 1, paddingVertical: 15, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -0.5 },
+    tabBtnActive: { borderBottomColor: INK },
+    tabText: { fontSize: 14, color: MUTED, fontWeight: '600' },
+    tabTextActive: { color: INK },
     addHabitRow: { alignItems: 'flex-end', paddingHorizontal: 16, marginTop: 16, marginBottom: 12 },
     grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2 },
     gridItem: { overflow: 'hidden' },
     gridImage: { width: '100%', height: '100%' },
-    gridNoImage: { width: '100%', height: '100%', backgroundColor: '#f0f7f0', justifyContent: 'center', alignItems: 'center', padding: 6 },
+    gridNoImage: { width: '100%', height: '100%', backgroundColor: '#F1EEE9', justifyContent: 'center', alignItems: 'center', padding: 6 },
     gridNoImageEmoji: { fontSize: 22, marginBottom: 4 },
-    gridNoImageText: { fontSize: 10, color: '#4CAF50', textAlign: 'center', fontWeight: '600' },
-    gridEmpty: { alignItems: 'center', paddingVertical: 40 },
-    gridEmptyEmoji: { fontSize: 40, marginBottom: 10 },
+    gridNoImageText: { fontSize: 10, color: ACCENT, textAlign: 'center', fontWeight: '600' },
+    gridEmpty: { alignItems: 'center', paddingVertical: 48 },
+    gridEmptyEmoji: { fontSize: 40, marginBottom: 10, opacity: 0.5 },
     postModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
-    postModalBox: { backgroundColor: '#fff', borderRadius: 16, maxHeight: '85%', overflow: 'hidden' },
-    postModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    postModalHabit: { fontSize: 15, fontWeight: 'bold', color: '#4CAF50' },
-    postModalClose: { fontSize: 18, color: '#888' },
+    postModalBox: { backgroundColor: SURFACE, borderRadius: 16, maxHeight: '85%', overflow: 'hidden' },
+    postModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 0.5, borderBottomColor: LINE },
+    postModalHabit: { fontSize: 15, fontWeight: 'bold', color: ACCENT },
+    postModalClose: { fontSize: 18, color: MUTED },
     postModalImage: { width: '100%', height: 320 },
     postModalBody: { padding: 16 },
-    postModalDate: { fontSize: 12, color: '#888', marginBottom: 8 },
+    postModalDate: { fontSize: 12, color: MUTED, marginBottom: 8 },
     postModalCaption: { fontSize: 15, color: '#333', lineHeight: 22 },
     postModalNoCaption: { fontSize: 14, color: '#bbb', fontStyle: 'italic' },
     postModalStats: { flexDirection: 'row', gap: 16, marginTop: 16 },
     postModalStat: { fontSize: 14, color: '#666' },
-    sectionTitle: { fontSize: 18, fontWeight: 'bold' },
-    addHabitButton: { backgroundColor: '#4CAF50', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8 },
+    sectionTitle: { fontSize: 18, fontFamily: SERIF, color: INK },
+    addHabitButton: { backgroundColor: ACCENT, paddingVertical: 7, paddingHorizontal: 14, borderRadius: 8 },
     addHabitButtonText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-    emptyText: { textAlign: 'center', color: '#aaa', fontSize: 14, marginTop: 20, paddingHorizontal: 16 },
-    habitCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginHorizontal: 16, marginBottom: 10, position: 'relative', minHeight: 100 },
-    habitPinned: { borderWidth: 1.5, borderColor: '#4CAF50' },
-    habitCardDone: { backgroundColor: '#f0fff0', borderWidth: 1.5, borderColor: '#4CAF50' },
+    emptyText: { textAlign: 'center', color: MUTED, fontSize: 14, marginTop: 20, paddingHorizontal: 16, lineHeight: 20 },
+    habitCard: { backgroundColor: SURFACE, borderRadius: 12, padding: 16, marginHorizontal: 16, marginBottom: 10, position: 'relative', minHeight: 100, borderWidth: 0.5, borderColor: LINE },
+    habitPinned: { borderWidth: 1.5, borderColor: ACCENT },
+    habitCardDone: { backgroundColor: '#FBF3EF', borderWidth: 1.5, borderColor: ACCENT },
     habitHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     habitTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     pinIcon: { fontSize: 14 },
-    habitName: { fontSize: 16, fontWeight: '600' },
+    habitName: { fontSize: 16, fontWeight: '600', color: INK },
     habitMenuButton: { padding: 10, marginRight: -10 },
-    habitMenuDots: { fontSize: 20, color: '#888', paddingHorizontal: 4 },
-    habitPopout: { position: 'absolute', top: 40, right: 16, backgroundColor: '#fff', borderRadius: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, minWidth: 160, zIndex: 99 },
+    habitMenuDots: { fontSize: 20, color: MUTED, paddingHorizontal: 4 },
+    habitPopout: { position: 'absolute', top: 40, right: 16, backgroundColor: SURFACE, borderRadius: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 5, minWidth: 160, zIndex: 99, borderWidth: 0.5, borderColor: LINE },
     habitMenuItem: { padding: 10 },
     habitMenuText: { fontSize: 13, color: '#333' },
     weekRow: { flexDirection: 'row', gap: 6, marginBottom: 12 },
-    dayCircle: { width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
-    dayCircleDone: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
-    dayLabel: { fontSize: 11, color: '#aaa', fontWeight: '600' },
+    dayCircle: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: LINE, justifyContent: 'center', alignItems: 'center' },
+    dayCircleDone: { backgroundColor: ACCENT, borderColor: ACCENT },
+    dayLabel: { fontSize: 11, color: MUTED, fontWeight: '600' },
     dayLabelDone: { color: '#fff' },
     habitStatsRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
     habitStat: { fontSize: 12, color: '#666' },
     habitStatPurple: { fontSize: 12, color: '#8E24AA', fontWeight: '700' },
     habitStatRed: { fontSize: 12, color: '#E53935', fontWeight: '700' },
     overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-    dropdownMenu: { position: 'absolute', top: 100, right: 16, backgroundColor: '#fff', borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, minWidth: 180 },
+    dropdownMenu: { position: 'absolute', top: 100, right: 16, backgroundColor: SURFACE, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 5, minWidth: 180, borderWidth: 0.5, borderColor: LINE },
     menuItem: { padding: 16 },
     menuItemText: { fontSize: 15, color: '#333' },
-    menuDivider: { height: 1, backgroundColor: '#f0f0f0' },
+    menuDivider: { height: 0.5, backgroundColor: LINE },
     commitmentOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-    commitmentBox: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 },
-    addHabitBox: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '85%' },
+    commitmentBox: { backgroundColor: SURFACE, borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 },
+    addHabitBox: { backgroundColor: SURFACE, borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, maxHeight: '85%' },
     menuBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 },
-    commitmentTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 12, textAlign: 'center' },
-    commitmentSubtitle: { fontSize: 15, color: '#888', marginBottom: 16, textAlign: 'center' },
+    commitmentTitle: { fontSize: 21, fontFamily: SERIF, color: INK, marginBottom: 12, textAlign: 'center' },
+    commitmentSubtitle: { fontSize: 15, color: MUTED, marginBottom: 16, textAlign: 'center' },
     modalLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8 },
     modalHint: { fontSize: 13, color: '#aaa', paddingVertical: 12, textAlign: 'center' },
-    modalSubHint: { fontSize: 12, color: '#4CAF50', textAlign: 'center', marginBottom: 12, marginTop: -8 },
+    modalSubHint: { fontSize: 12, color: ACCENT, textAlign: 'center', marginBottom: 12, marginTop: -8 },
     habitPickList: { maxHeight: 180, marginBottom: 12 },
-    habitPickItem: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: '#eee', marginBottom: 8, backgroundColor: '#fafafa' },
-    habitPickItemActive: { borderColor: '#4CAF50', backgroundColor: '#f0fff0' },
+    habitPickItem: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: LINE, marginBottom: 8, backgroundColor: PAPER },
+    habitPickItemActive: { borderColor: ACCENT, backgroundColor: '#FBF3EF' },
     habitPickText: { fontSize: 14, color: '#444' },
-    habitPickTextActive: { color: '#4CAF50', fontWeight: '600' },
+    habitPickTextActive: { color: ACCENT, fontWeight: '600' },
     commitmentRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap', justifyContent: 'center' },
-    commitmentChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd' },
-    commitmentChipWide: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd' },
-    commitmentChipActive: { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
+    commitmentChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: LINE },
+    commitmentChipWide: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: LINE },
+    commitmentChipActive: { backgroundColor: ACCENT, borderColor: ACCENT },
     commitmentChipText: { color: '#666' },
     commitmentChipTextActive: { color: '#fff', fontWeight: 'bold' },
     modalErrorText: { color: '#ff4444', fontSize: 13, marginBottom: 8, textAlign: 'center' },
-    saveButton: { backgroundColor: '#4CAF50', padding: 14, borderRadius: 10, alignItems: 'center', marginBottom: 8 },
-    saveButtonDisabled: { backgroundColor: '#a5d6a7' },
+    saveButton: { backgroundColor: ACCENT, padding: 14, borderRadius: 10, alignItems: 'center', marginBottom: 8 },
+    saveButtonDisabled: { backgroundColor: '#E0A48D' },
     saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
     cancelButton: { padding: 14, borderRadius: 8, alignItems: 'center' },
-    cancelText: { color: '#888', fontSize: 16 },
+    cancelText: { color: MUTED, fontSize: 16 },
 });

@@ -11,6 +11,16 @@ import {
 } from 'react-native';
 import { auth, db } from '../firebaseConfig';
 
+// Serif display font (OS built-in serif — no font install needed)
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }) as string;
+// Design tokens (minimalist: warm paper, ink text, one terracotta accent)
+const ACCENT = '#C1440E';
+const INK = '#1A1A1A';
+const MUTED = '#9A968E';
+const LINE = '#EAE8E2';
+const PAPER = '#FBFAF8';
+const SURFACE = '#FFFFFF';
+
 type Post = {
     id: string;
     userId: string;
@@ -179,7 +189,7 @@ export default function CommunityScreen() {
                 {/* ---------------- POSTS ---------------- */}
                 {tab === 'posts' && (
                     loading ? (
-                        <ActivityIndicator style={{ marginTop: 32 }} color="#4CAF50" />
+                        <ActivityIndicator style={{ marginTop: 32 }} color={ACCENT} />
                     ) : posts.length === 0 ? (
                         <View style={styles.emptyBox}>
                             <Text style={styles.emptyEmoji}>🌱</Text>
@@ -234,7 +244,7 @@ export default function CommunityScreen() {
                 {/* ---------------- CHAT ---------------- */}
                 {/* Chat is members-only: you must have this habit to read or write. */}
                 {tab === 'chat' && !membersLoaded && (
-                    <ActivityIndicator style={{ marginTop: 32 }} color="#4CAF50" />
+                    <ActivityIndicator style={{ marginTop: 32 }} color={ACCENT} />
                 )}
 
                 {tab === 'chat' && membersLoaded && !isMember && (
@@ -288,7 +298,7 @@ export default function CommunityScreen() {
                                 <TextInput
                                     style={styles.input}
                                     placeholder={`Message ${name}...`}
-                                    placeholderTextColor="#aaa"
+                                    placeholderTextColor={MUTED}
                                     value={draft}
                                     onChangeText={setDraft}
                                     multiline
@@ -309,56 +319,56 @@ export default function CommunityScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 56, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-    backText: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
-    headerTitle: { fontSize: 18, fontWeight: 'bold' },
-    headerSub: { fontSize: 12, color: '#888', marginTop: 2 },
-    tabRow: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-    tabBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-    tabBtnActive: { borderBottomColor: '#4CAF50' },
-    tabText: { fontSize: 14, color: '#888', fontWeight: '600' },
-    tabTextActive: { color: '#4CAF50' },
+    container: { flex: 1, backgroundColor: PAPER },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 56, backgroundColor: PAPER, borderBottomWidth: 0.5, borderBottomColor: LINE },
+    backText: { color: ACCENT, fontSize: 16, fontWeight: '600' },
+    headerTitle: { fontSize: 19, fontFamily: SERIF, color: INK, letterSpacing: -0.2 },
+    headerSub: { fontSize: 12, color: MUTED, marginTop: 3 },
+    tabRow: { flexDirection: 'row', backgroundColor: PAPER, borderBottomWidth: 0.5, borderBottomColor: LINE },
+    tabBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -0.5 },
+    tabBtnActive: { borderBottomColor: INK },
+    tabText: { fontSize: 14, color: MUTED, fontWeight: '600' },
+    tabTextActive: { color: INK },
     emptyBox: { alignItems: 'center', marginTop: 60, paddingHorizontal: 32 },
-    emptyEmoji: { fontSize: 44, marginBottom: 12 },
-    emptyText: { fontSize: 15, color: '#888', textAlign: 'center', lineHeight: 22 },
+    emptyEmoji: { fontSize: 44, marginBottom: 12, opacity: 0.6 },
+    emptyText: { fontSize: 15, color: MUTED, textAlign: 'center', lineHeight: 22 },
     // Posts
-    post: { backgroundColor: '#fff', marginTop: 8, paddingBottom: 8 },
+    post: { backgroundColor: SURFACE, marginTop: 8, paddingBottom: 8, borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: LINE },
     postHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10 },
-    avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
-    avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-    postName: { fontSize: 14, fontWeight: '600', color: '#333' },
-    postUsername: { fontSize: 12, color: '#888' },
+    avatar: { width: 40, height: 40, borderRadius: 12, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center' },
+    avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16, fontFamily: SERIF },
+    postName: { fontSize: 14, fontWeight: '600', color: INK },
+    postUsername: { fontSize: 12, color: MUTED },
     postImage: { width: '100%', height: 300 },
-    postImagePlaceholder: { width: '100%', height: 200, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center' },
+    postImagePlaceholder: { width: '100%', height: 200, backgroundColor: '#F1EEE9', justifyContent: 'center', alignItems: 'center' },
     postBody: { paddingHorizontal: 12, paddingTop: 8 },
     actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
     likeIcon: { fontSize: 20 },
-    likeCount: { fontSize: 13, color: '#333', fontWeight: '600' },
-    commentCount: { fontSize: 13, color: '#888', marginLeft: 8 },
+    likeCount: { fontSize: 13, color: INK, fontWeight: '600' },
+    commentCount: { fontSize: 13, color: MUTED, marginLeft: 8 },
     caption: { fontSize: 14, color: '#333', lineHeight: 20 },
-    captionName: { fontWeight: '600' },
+    captionName: { fontWeight: '600', color: INK },
     // Chat
     chatScroll: { flex: 1 },
     bubbleRow: { flexDirection: 'row', marginBottom: 10 },
     bubbleRowMine: { justifyContent: 'flex-end' },
     bubble: { maxWidth: '78%', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8 },
-    bubbleOther: { backgroundColor: '#fff', borderTopLeftRadius: 4 },
-    bubbleMine: { backgroundColor: '#4CAF50', borderTopRightRadius: 4 },
-    senderName: { fontSize: 12, fontWeight: 'bold', color: '#4CAF50', marginBottom: 3 },
+    bubbleOther: { backgroundColor: SURFACE, borderTopLeftRadius: 4, borderWidth: 0.5, borderColor: LINE },
+    bubbleMine: { backgroundColor: ACCENT, borderTopRightRadius: 4 },
+    senderName: { fontSize: 12, fontWeight: 'bold', color: ACCENT, marginBottom: 3 },
     bubbleText: { fontSize: 15, color: '#333', lineHeight: 20 },
     bubbleTextMine: { color: '#fff' },
     bubbleTime: { fontSize: 10, color: '#aaa', marginTop: 4, alignSelf: 'flex-end' },
-    bubbleTimeMine: { color: 'rgba(255,255,255,0.75)' },
-    inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 12, paddingBottom: 36, gap: 8, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
-    input: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, backgroundColor: '#fafafa', maxHeight: 100, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
-    sendBtn: { backgroundColor: '#4CAF50', paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20 },
-    sendBtnDisabled: { backgroundColor: '#a5d6a7' },
+    bubbleTimeMine: { color: 'rgba(255,255,255,0.8)' },
+    inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 12, paddingBottom: 36, gap: 8, backgroundColor: PAPER, borderTopWidth: 0.5, borderTopColor: LINE },
+    input: { flex: 1, borderWidth: 0.5, borderColor: LINE, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, backgroundColor: SURFACE, maxHeight: 100, ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
+    sendBtn: { backgroundColor: ACCENT, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20 },
+    sendBtnDisabled: { backgroundColor: '#E0A48D' },
     sendText: { color: '#fff', fontWeight: 'bold' },
-    lockedBox: { alignItems: 'center', marginTop: 60, marginHorizontal: 24, backgroundColor: '#fff', borderRadius: 12, padding: 28 },
+    lockedBox: { alignItems: 'center', marginTop: 60, marginHorizontal: 24, backgroundColor: SURFACE, borderRadius: 12, padding: 28, borderWidth: 0.5, borderColor: LINE },
     lockedEmoji: { fontSize: 40, marginBottom: 12 },
-    lockedTitle: { fontSize: 17, fontWeight: 'bold', marginBottom: 8 },
-    lockedText: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, marginBottom: 16 },
-    joinBtn: { borderWidth: 1, borderColor: '#4CAF50', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 },
-    joinBtnText: { color: '#4CAF50', fontWeight: '600', fontSize: 13 },
+    lockedTitle: { fontSize: 17, fontFamily: SERIF, color: INK, marginBottom: 8 },
+    lockedText: { fontSize: 14, color: MUTED, textAlign: 'center', lineHeight: 20, marginBottom: 16 },
+    joinBtn: { borderWidth: 1, borderColor: ACCENT, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 },
+    joinBtnText: { color: ACCENT, fontWeight: '600', fontSize: 13 },
 });
