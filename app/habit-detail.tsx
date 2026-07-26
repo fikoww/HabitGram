@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator, Alert, Platform, ScrollView,
-    StyleSheet, Text, TextInput, TouchableOpacity, View
+    ActivityIndicator,
+    Image, Platform, ScrollView,
+    StyleSheet, Text,
+    TouchableOpacity, View
 } from 'react-native';
-import { arrayRemove, arrayUnion, setDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
 // Serif display font (OS built-in serif — no font install needed)
@@ -22,6 +23,7 @@ const SURFACE = '#FFFFFF';
 type Habit = {
     id: string;
     name: string;
+    userId?: string;
     commitment?: number;
     completedDates?: string[];
     journals?: Record<string, string>;
@@ -68,6 +70,7 @@ export default function HabitDetailScreen() {
     const [viewYear, setViewYear] = useState(new Date().getFullYear());
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [journalText, setJournalText] = useState('');
+    const [dayPhoto, setDayPhoto] = useState('');
 
     useEffect(() => {
         if (!id) return;
@@ -99,27 +102,31 @@ export default function HabitDetailScreen() {
 
     const todayStr = fmt(new Date());
 
-    const openDay = (dateStr: string) => {
+    const isValidImageUrl = (url: any) => {
+        if (typeof url !== 'string') return false;
+        const t = url.trim();
+        return t.length > 0 && /^(https?:\/\/|blob:|data:)/.test(t);
+    };
+
+    const openDay = async (dateStr: string) => {
         setSelectedDate(dateStr);
         setJournalText(journals[dateStr] || '');
+        setDayPhoto('');
+        if (!habit) return;
+        try {
+            // Find this user's post for this habit on this date, and show its photo
+            const snap = await getDocs(query(collection(db, 'posts'), where('userId', '==', habit.userId)));
+            for (const d of snap.docs) {
+                const data: any = d.data();
+                if (data.habitName === habit.name && data.completedDate === dateStr && isValidImageUrl(data.imageUrl)) {
+                    setDayPhoto(data.imageUrl);
+                    break;
+                }
+            }
+        } catch (e) { /* ignore — just no photo shown */ }
     };
 
-    const toggleDone = async () => {
-        if (!selectedDate) return;
-        const isDone = completedDates.includes(selectedDate);
-        await updateDoc(doc(db, 'habits', habit.id), {
-            completedDates: isDone ? arrayRemove(selectedDate) : arrayUnion(selectedDate),
-        });
-    };
 
-    const saveJournal = async () => {
-        if (!selectedDate) return;
-        await setDoc(doc(db, 'habits', habit.id), {
-            journals: { ...journals, [selectedDate]: journalText.trim() },
-        }, { merge: true });
-        Alert.alert('Saved', 'Your note has been saved.');
-        setSelectedDate(null);
-    };
 
     // Calendar grid
     const firstDay = new Date(viewYear, viewMonth, 1).getDay();
@@ -212,28 +219,32 @@ export default function HabitDetailScreen() {
                         <View style={styles.editorHandle} />
                         <Text style={styles.editorDate}>{selectedDate}</Text>
 
-                        <TouchableOpacity
-                            style={[styles.doneButton, completedDates.includes(selectedDate) && styles.doneButtonActive]}
-                            onPress={toggleDone}
-                        >
-                            <Text style={[styles.doneButtonText, completedDates.includes(selectedDate) && styles.doneButtonTextActive]}>
-                                {completedDates.includes(selectedDate) ? '✓ Done' : 'Mark as Done'}
+                        {/* Read-only status — habits are marked done by posting, not from here */}
+                        <View style={[styles.statusPill, completedDates.includes(selectedDate) ? styles.statusPillDone : styles.statusPillNot]}>
+                            <Text style={[styles.statusText, completedDates.includes(selectedDate) ? styles.statusTextDone : styles.statusTextNot]}>
+                                {completedDates.includes(selectedDate) ? '✓ Completed on this day' : 'Not completed'}
                             </Text>
-                        </TouchableOpacity>
+                        </View>
 
-                        <Text style={styles.editorLabel}>Note / Journal</Text>
-                        <TextInput
-                            style={styles.journalInput}
-                            value={journalText}
-                            onChangeText={setJournalText}
-                            placeholder="How did it go?"
-                            placeholderTextColor={MUTED}
-                            multiline
-                        />
+                        {dayPhoto ? (
+                            <Image source={{ uri: dayPhoto }} style={styles.dayImage} resizeMode="cover" />
+                        ) : null}
 
-                        <TouchableOpacity style={styles.saveButton} onPress={saveJournal}>
-                            <Text style={styles.saveButtonText}>Save</Text>
-                        </TouchableOpacity>
+                        <Text style={styles.editorLabel}>Note</Text>
+                        {journals[selectedDate] ? (
+                            <Text style={styles.noteText}>{journals[selectedDate]}</Text>
+                        ) : (
+                            <Text style={styles.noteEmpty}>No note for this day.</Text>
+                        )}
+
+                        {!completedDates.includes(selectedDate) && (
+                            <View style={styles.hintBox}>
+                                <Text style={styles.hintText}>
+                                    To mark this habit done and add a note, create a post. Tap “+ Post” on the home feed.
+                                </Text>
+                            </View>
+                        )}
+
                         <TouchableOpacity style={styles.closeButton} onPress={() => setSelectedDate(null)}>
                             <Text style={styles.closeButtonText}>Close</Text>
                         </TouchableOpacity>
@@ -284,6 +295,17 @@ const styles = StyleSheet.create({
     doneButtonTextActive: { color: '#fff' },
     editorLabel: { fontSize: 12, fontWeight: '600', color: MUTED, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
     journalInput: { backgroundColor: PAPER, borderWidth: 0.5, borderColor: LINE, borderRadius: 10, padding: 12, fontSize: 15, color: INK, minHeight: 90, textAlignVertical: 'top', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}) },
+    dayImage: { width: '100%', height: 220, borderRadius: 12, marginBottom: 18 },
+    statusPill: { borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginBottom: 20 },
+    statusPillDone: { backgroundColor: '#FBF3EF', borderWidth: 1, borderColor: ACCENT },
+    statusPillNot: { backgroundColor: PAPER, borderWidth: 0.5, borderColor: LINE },
+    statusText: { fontWeight: '700', fontSize: 15 },
+    statusTextDone: { color: ACCENT },
+    statusTextNot: { color: MUTED },
+    noteText: { fontSize: 15, color: INK, lineHeight: 22, backgroundColor: PAPER, borderRadius: 10, borderWidth: 0.5, borderColor: LINE, padding: 12 },
+    noteEmpty: { fontSize: 14, color: MUTED, fontStyle: 'italic', paddingVertical: 4 },
+    hintBox: { marginTop: 18, backgroundColor: '#FBF3EF', borderRadius: 10, padding: 12 },
+    hintText: { fontSize: 13, color: ACCENT, lineHeight: 18 },
     saveButton: { backgroundColor: ACCENT, borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
     saveButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
     closeButton: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },

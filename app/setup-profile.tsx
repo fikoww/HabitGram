@@ -221,7 +221,7 @@ export default function SetupProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: PAPER, padding: 24 },
+  container: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFE9DE', padding: 24 },
   progressBar: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   progressStep: { width: 60, height: 6, borderRadius: 3, backgroundColor: '#E0DDD6' },
   progressActive: { backgroundColor: ACCENT },

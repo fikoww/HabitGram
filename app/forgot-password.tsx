@@ -53,7 +53,7 @@ export default function ForgotPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: PAPER },
+  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#FFE9DE' },
   title: { fontSize: 28, fontFamily: SERIF, textAlign: 'center', marginBottom: 8, color: INK, letterSpacing: -0.3 },
   subtitle: { fontSize: 14, textAlign: 'center', color: MUTED, marginBottom: 32 },
   input: { borderWidth: 0.5, borderColor: LINE, borderRadius: 10, padding: 14, marginBottom: 16, color: INK, fontSize: 15, backgroundColor: SURFACE, ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }) },
