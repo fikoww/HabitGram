@@ -308,6 +308,15 @@ export default function HomeScreen() {
     const q = query(collection(db, 'posts', post.id, 'comments'), orderBy('createdAt', 'asc'));
     const snap = await getDocs(q);
     setComments(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Comment, 'id'>) })));
+
+    // Heal the count: the true number of comments is snap.size. If the stored
+    // commentCount drifted, fix it in Firestore and locally.
+    const realCount = snap.size;
+    if (realCount !== (post.commentCount || 0)) {
+      setPosts((prev) => prev.map((pp) => pp.id === post.id ? { ...pp, commentCount: realCount } : pp));
+      setActivePost((prev) => prev ? { ...prev, commentCount: realCount } : prev);
+      updateDoc(doc(db, 'posts', post.id), { commentCount: realCount }).catch(() => {});
+    }
   };
 
   const submitComment = async () => {

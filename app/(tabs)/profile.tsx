@@ -396,9 +396,10 @@ export default function ProfileScreen() {
                 {/* ---------- POSTS GRID ---------- */}
                 {activeTab === 'posts' && (
                     posts.length === 0 ? (
-                        <View style={styles.gridEmpty}>
-                            <Text style={styles.gridEmptyEmoji}>📷</Text>
-                            <Text style={styles.emptyText}>No posts yet.{'\n'}Share your first habit post!</Text>
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyStateEmoji}>📷</Text>
+                            <Text style={styles.emptyStateTitle}>No posts yet</Text>
+                            <Text style={styles.emptyStateText}>Share your first habit post to see it here.</Text>
                         </View>
                     ) : (
                         <View style={styles.grid}>
@@ -428,7 +429,11 @@ export default function ProfileScreen() {
                 )}
 
                 {activeTab === 'habits' && habits.length === 0 && (
-                    <Text style={styles.emptyText}>No habits yet. Tap "+ Add Habit" to start!</Text>
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyStateEmoji}>🌱</Text>
+                        <Text style={styles.emptyStateTitle}>No habits yet</Text>
+                        <Text style={styles.emptyStateText}>Tap “+ Add Habit” above to start building your first habit.</Text>
+                    </View>
                 )}
 
                 {/* Habit list */}
@@ -441,26 +446,22 @@ export default function ProfileScreen() {
                     const commitmentMet = commitment > 0 && doneThisWeek >= commitment;
 
                     return (
-                        <TouchableOpacity
+                        <View
                             key={habit.id}
                             style={[styles.habitCard, habit.pinned && styles.habitPinned, commitmentMet && styles.habitCardDone]}
-                            onPress={() => {
-                                if (habitMenuId !== null) {
-                                    setHabitMenuId(null);
-                                    return;
-                                }
-                                router.push(`/habit-detail?id=${habit.id}`);
-                            }}
                         >
                             <View style={styles.habitHeader}>
-                                <View style={styles.habitTitleRow}>
+                                <TouchableOpacity
+                                    style={styles.habitTitleRow}
+                                    onPress={() => router.push(`/habit-detail?id=${habit.id}`)}
+                                >
                                     {habit.pinned && <Text style={styles.pinIcon}>📌 </Text>}
                                     <Text style={styles.habitName}>{habit.name}</Text>
-                                </View>
+                                </TouchableOpacity>
                                 <TouchableOpacity
                                     style={styles.habitMenuButton}
                                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                    onPress={(e) => { e.stopPropagation(); setHabitMenuId(habitMenuId === habit.id ? null : habit.id); }}
+                                    onPress={() => setHabitMenuId(habitMenuId === habit.id ? null : habit.id)}
                                 >
                                     <Text style={styles.habitMenuDots}>⋮</Text>
                                 </TouchableOpacity>
@@ -510,7 +511,7 @@ export default function ProfileScreen() {
                                     <Text style={styles.habitStat}>🏆 Best: {max} week(s)</Text>
                                 </View>
                             )}
-                        </TouchableOpacity>
+                        </View>
                     );
                 })}
 
@@ -743,6 +744,10 @@ const styles = StyleSheet.create({
     gridNoImage: { width: '100%', height: '100%', backgroundColor: '#F1EEE9', justifyContent: 'center', alignItems: 'center', padding: 6 },
     gridNoImageEmoji: { fontSize: 22, marginBottom: 4 },
     gridNoImageText: { fontSize: 10, color: ACCENT, textAlign: 'center', fontWeight: '600' },
+    emptyState: { alignItems: 'center', paddingVertical: 56, paddingHorizontal: 40 },
+    emptyStateEmoji: { fontSize: 46, marginBottom: 14, opacity: 0.55 },
+    emptyStateTitle: { fontSize: 17, fontFamily: SERIF, color: INK, marginBottom: 6 },
+    emptyStateText: { fontSize: 14, color: MUTED, textAlign: 'center', lineHeight: 20 },
     gridEmpty: { alignItems: 'center', paddingVertical: 48 },
     gridEmptyEmoji: { fontSize: 40, marginBottom: 10, opacity: 0.5 },
     postModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },

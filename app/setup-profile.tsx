@@ -23,14 +23,20 @@ export default function SetupProfileScreen() {
   const [username, setUsername] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [selectedHabits, setSelectedHabits] = useState<string[]>([]);
+  const [pickedHabits, setPickedHabits] = useState<string[]>([]); // habit names chosen across all categories
   const [selectedCategory, setSelectedCategory] = useState('Sport');
   const [habitList, setHabitList] = useState<{ id: string; name: string }[]>([]);
-  const [selectedHabit, setSelectedHabit] = useState('');
+
 
   const fetchHabits = async (category: string) => {
     const snapshot = await getDocs(query(collection(db, 'habitlist'), where('category', '==', category)));
     setHabitList(snapshot.docs.map((d) => ({ id: d.id, name: d.data().name })));
+  };
+
+  const toggleHabit = (name: string) => {
+    setPickedHabits((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
   };
 
   const handleNextStep1 = async () => {
@@ -71,14 +77,17 @@ export default function SetupProfileScreen() {
       createdAt: serverTimestamp(),
     });
 
-    if (!skip && selectedHabit) {
-      await addDoc(collection(db, 'habits'), {
-        name: selectedHabit,
-        completed: false,
-        completedDates: [],
-        userId: user.uid,
-        createdAt: serverTimestamp(),
-      });
+    if (!skip && pickedHabits.length > 0) {
+      await Promise.all(pickedHabits.map((name) =>
+        addDoc(collection(db, 'habits'), {
+          name,
+          commitment: 1, // default 1x/week — changeable later in Profile
+          completed: false,
+          completedDates: [],
+          userId: user.uid,
+          createdAt: serverTimestamp(),
+        })
+      ));
     }
 
     router.replace('/(tabs)/home');
@@ -135,7 +144,7 @@ export default function SetupProfileScreen() {
           </TouchableOpacity>
 
           <Text style={styles.title}>Pick Habits!</Text>
-          <Text style={styles.subtitle}>Choose one habit to start!</Text>
+          <Text style={styles.subtitle}>Pick as many as you like — from any category.</Text>
 
           <Text style={styles.label}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
@@ -145,7 +154,6 @@ export default function SetupProfileScreen() {
                 style={[styles.categoryChip, selectedCategory === cat && styles.categoryChipActive]}
                 onPress={() => {
                   setSelectedCategory(cat);
-                  setSelectedHabit('');
                   fetchHabits(cat);
                 }}
               >
@@ -160,25 +168,47 @@ export default function SetupProfileScreen() {
           {habitList.length === 0 ? (
             <Text style={styles.emptyText}>No habits in this category yet.</Text>
           ) : (
-            habitList.map((h) => (
-              <TouchableOpacity
-                key={h.id}
-                style={[styles.habitItem, selectedHabit === h.name && styles.habitItemActive]}
-                onPress={() => setSelectedHabit(h.name)}
-              >
-                <Text style={[styles.habitItemText, selectedHabit === h.name && styles.habitItemTextActive]}>
-                  {selectedHabit === h.name ? '✅ ' : '○ '}{h.name}
-                </Text>
-              </TouchableOpacity>
-            ))
+            habitList.map((h) => {
+              const picked = pickedHabits.includes(h.name);
+              return (
+                <TouchableOpacity
+                  key={h.id}
+                  style={[styles.habitItem, picked && styles.habitItemActive]}
+                  onPress={() => toggleHabit(h.name)}
+                >
+                  <Text style={[styles.habitItemText, picked && styles.habitItemTextActive]}>
+                    {picked ? '☑️ ' : '⬜ '}{h.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })
+          )}
+
+          <Text style={styles.commitmentNote}>
+            Each habit starts at 1x per week. You can change this anytime in your Profile (tap ⋮ on a habit → Change Commitment).
+          </Text>
+
+          {pickedHabits.length > 0 && (
+            <View style={styles.pickedBox}>
+              <Text style={styles.pickedLabel}>Selected ({pickedHabits.length})</Text>
+              <View style={styles.pickedWrap}>
+                {pickedHabits.map((n) => (
+                  <TouchableOpacity key={n} style={styles.pickedChip} onPress={() => toggleHabit(n)}>
+                    <Text style={styles.pickedChipText}>{n} ✕</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           )}
 
           <TouchableOpacity
-            style={[styles.button, !selectedHabit && styles.buttonDisabled]}
+            style={[styles.button, pickedHabits.length === 0 && styles.buttonDisabled]}
             onPress={() => handleFinish(false)}
-            disabled={!selectedHabit}
+            disabled={pickedHabits.length === 0}
           >
-            <Text style={styles.buttonText}>Let&apos;s Go!</Text>
+            <Text style={styles.buttonText}>
+              {pickedHabits.length > 0 ? `Let's Go! (${pickedHabits.length})` : "Let's Go!"}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.skipButton} onPress={() => handleFinish(true)}>
@@ -222,4 +252,10 @@ const styles = StyleSheet.create({
   habitItemText: { fontSize: 15, color: '#333' },
   habitItemTextActive: { color: ACCENT, fontWeight: 'bold' },
   emptyText: { color: MUTED, fontSize: 14, marginBottom: 8 },
+  commitmentNote: { fontSize: 12, color: MUTED, lineHeight: 17, marginTop: 14, paddingHorizontal: 2 },
+  pickedBox: { marginTop: 14, backgroundColor: PAPER, borderRadius: 12, padding: 12, borderWidth: 0.5, borderColor: LINE },
+  pickedLabel: { fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  pickedWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  pickedChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: ACCENT, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  pickedChipText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 });

@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { auth, db } from '../firebaseConfig';
 
 // Serif display font (OS built-in serif — no font install needed)
@@ -97,6 +97,13 @@ const getWeekStreak = (completedDates: string[], commitment: number) => {
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
+// A post counts as a photo post only if imageUrl is a real image URL
+const isValidImageUrl = (url: any) => {
+    if (typeof url !== 'string') return false;
+    const trimmed = url.trim();
+    return trimmed.length > 0 && /^(https?:\/\/|blob:|data:)/.test(trimmed);
+};
+
 export default function UserProfileScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const [displayName, setDisplayName] = useState('');
@@ -148,13 +155,10 @@ export default function UserProfileScreen() {
         // Their posts (sorted client-side to avoid needing a composite index)
         const pq = query(collection(db, 'posts'), where('userId', '==', id));
         const unsubPosts = onSnapshot(pq, (snap) => {
-            const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }));
-            list.sort((a, b) => {
-                const aHasPhoto = a.imageUrl ? 1 : 0;
-                const bHasPhoto = b.imageUrl ? 1 : 0;
-                if (aHasPhoto !== bHasPhoto) return bHasPhoto - aHasPhoto;
-                return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-            });
+            const list = snap.docs
+                .map((d) => ({ id: d.id, ...(d.data() as Omit<Post, 'id'>) }))
+                .filter((p) => isValidImageUrl(p.imageUrl));   // photo posts only
+            list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             setPosts(list);
         });
 
@@ -344,9 +348,12 @@ export default function UserProfileScreen() {
                         {/* ---------- POSTS GRID ---------- */}
                         {activeTab === 'posts' && (
                             posts.length === 0 ? (
-                                <View style={styles.gridEmpty}>
-                                    <Text style={styles.gridEmptyEmoji}>📷</Text>
-                                    <Text style={styles.emptyText}>No posts yet.</Text>
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyStateEmoji}>📷</Text>
+                                    <Text style={styles.emptyStateTitle}>No posts yet</Text>
+                                    <Text style={styles.emptyStateText}>
+                                        {displayName ? `${displayName} hasn't` : "This user hasn't"} shared any posts yet.
+                                    </Text>
                                 </View>
                             ) : (
                                 <View style={styles.grid}>
@@ -368,7 +375,13 @@ export default function UserProfileScreen() {
 
                         {/* ---------- HABITS LIST ---------- */}
                         {activeTab === 'habits' && habits.length === 0 && (
-                            <Text style={styles.emptyText}>No habits yet.</Text>
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyStateEmoji}>🌱</Text>
+                                <Text style={styles.emptyStateTitle}>No habits yet</Text>
+                                <Text style={styles.emptyStateText}>
+                                    {displayName ? `${displayName} hasn't` : "This user hasn't"} started any habits yet.
+                                </Text>
+                            </View>
                         )}
                         {activeTab === 'habits' && habits.map((habit) => {
                             const commitment = habit.commitment ?? 1;
@@ -494,6 +507,10 @@ const styles = StyleSheet.create({
     gridNoImage: { width: '100%', height: '100%', backgroundColor: '#F1EEE9', justifyContent: 'center', alignItems: 'center', padding: 6 },
     gridNoImageEmoji: { fontSize: 22, marginBottom: 4 },
     gridNoImageText: { fontSize: 10, color: ACCENT, textAlign: 'center', fontWeight: '600' },
+    emptyState: { alignItems: 'center', paddingVertical: 56, paddingHorizontal: 40 },
+    emptyStateEmoji: { fontSize: 46, marginBottom: 14, opacity: 0.55 },
+    emptyStateTitle: { fontSize: 17, fontFamily: SERIF, color: INK, marginBottom: 6 },
+    emptyStateText: { fontSize: 14, color: MUTED, textAlign: 'center', lineHeight: 20 },
     gridEmpty: { alignItems: 'center', paddingVertical: 48 },
     gridEmptyEmoji: { fontSize: 40, marginBottom: 10, opacity: 0.5 },
     habitCard: { backgroundColor: SURFACE, borderRadius: 12, padding: 16, marginHorizontal: 16, marginTop: 10, borderWidth: 0.5, borderColor: LINE },
