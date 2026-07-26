@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -127,7 +128,7 @@ export default function EditProfileScreen() {
                             </View>
                         )}
                         <View style={styles.cameraBadge}>
-                            <Text style={styles.cameraIcon}>📷</Text>
+                            <Ionicons name="camera" size={15} color="#555" />
                         </View>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={pickImage}>

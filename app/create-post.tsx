@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { addDoc, arrayUnion, collection, doc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
@@ -136,7 +137,7 @@ export default function CreatePostScreen() {
                         <Image source={{ uri: imageUri }} style={styles.image} />
                     ) : (
                         <View style={styles.imagePlaceholder}>
-                            <Text style={styles.imagePlaceholderIcon}>📷</Text>
+                            <Ionicons name="camera-outline" size={44} color="#9A968E" style={styles.imagePlaceholderIcon} />
                             <Text style={styles.imagePlaceholderText}>Add a photo (optional)</Text>
                         </View>
                     )}

@@ -1,14 +1,15 @@
 import { HapticTab } from '@/components/haptic-tab';
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-// Emoji never receives `color`, so it always keeps its own colours.
-// Active state is shown with a background pill instead.
-function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
+// Line icons (Ionicons, built into Expo — no install needed).
+// Active state: terracotta icon on a soft terracotta pill.
+function TabIcon({ name, focused }: { name: keyof typeof Ionicons.glyphMap; focused: boolean }) {
   return (
     <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
-      <Text style={styles.emoji}>{emoji}</Text>
+      <Ionicons name={name} size={22} color={focused ? '#C1440E' : '#9A968E'} />
     </View>
   );
 }
@@ -19,36 +20,37 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarActiveTintColor: '#4CAF50',
-        tabBarInactiveTintColor: '#888',
+        tabBarActiveTintColor: '#C1440E',
+        tabBarInactiveTintColor: '#9A968E',
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarStyle: { backgroundColor: '#FBFAF8', borderTopColor: '#EAE8E2', borderTopWidth: 0.5 },
       }}>
       <Tabs.Screen
         name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Explore',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🔍" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'search' : 'search-outline'} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="communities"
         options={{
           title: 'Communities',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="👥" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'people' : 'people-outline'} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="👤" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name={focused ? 'person' : 'person-outline'} focused={focused} />,
         }}
       />
     </Tabs>
@@ -57,16 +59,14 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   iconWrap: {
-    width: 48,
+    minWidth: 48,
     height: 30,
     borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 14,
   },
   iconWrapActive: {
-    backgroundColor: '#E8F5E9', // light green pill for the active tab
-  },
-  emoji: {
-    fontSize: 20,
+    backgroundColor: '#F4E3DB', // soft terracotta pill for the active tab
   },
 });

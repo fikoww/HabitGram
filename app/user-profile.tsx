@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
@@ -260,7 +261,7 @@ export default function UserProfileScreen() {
                             <Text style={styles.avatarText}>{displayName ? displayName[0].toUpperCase() : '?'}</Text>
                         </View>
                     )}
-                    <Text style={styles.name}>{displayName} {isPrivate ? <Text style={styles.lockMini}>🔒</Text> : null}</Text>
+                    <Text style={styles.name}>{displayName} {isPrivate ? <Ionicons name="lock-closed" size={15} color="#9A968E" /> : null}</Text>
                     <Text style={styles.username}>@{username}</Text>
                     {bio ? <Text style={styles.bio}>{bio}</Text> : null}
                     {/* Top streaks */}
@@ -268,7 +269,7 @@ export default function UserProfileScreen() {
                         <View style={styles.streakWrap}>
                             {topStreaks.map((sk) => (
                                 <View key={sk.name} style={styles.streakChip}>
-                                    <Text style={styles.fire}>🔥</Text>
+                                    <Ionicons name="flame" size={12} color="#E23B2E" style={{ marginRight: 4 }} />
                                     <Text style={styles.streakLabel}>
                                         {sk.name} · {sk.weeks}w
                                     </Text>
@@ -303,7 +304,7 @@ export default function UserProfileScreen() {
                 {/* Locked state for private accounts */}
                 {locked ? (
                     <View style={styles.lockedBox}>
-                        <Text style={styles.lockedEmoji}>🔒</Text>
+                        <Ionicons name="lock-closed" size={38} color="#C1440E" style={styles.lockedEmoji} />
                         <Text style={styles.lockedTitle}>This Account is Private</Text>
                         <Text style={styles.lockedText}>Follow this account to see their habits and posts.</Text>
                     </View>
@@ -410,12 +411,12 @@ export default function UserProfileScreen() {
                                     {isNoCommitment ? (
                                         <View style={styles.habitStatsRow}>
                                             <Text style={styles.habitStat}>✨ Just do it (no goal)</Text>
-                                            <Text style={styles.habitStatRed}>🔥 {totalDoneH}x done total</Text>
+                                            <Text style={styles.habitStatRed}><Ionicons name="flame" size={13} color="#E23B2E" /> {totalDoneH}x done total</Text>
                                         </View>
                                     ) : (
                                         <View style={styles.habitStatsRow}>
                                             <Text style={styles.habitStat}>🎯 {commitment}x/week</Text>
-                                            <Text style={styles.habitStatPurple}>🔥 {current} week(s) streak</Text>
+                                            <Text style={styles.habitStatPurple}><Ionicons name="flame" size={13} color="#E23B2E" /> {current} week(s) streak</Text>
                                             <Text style={styles.habitStat}>🏆 Best: {max} week(s)</Text>
                                         </View>
                                     )}
@@ -433,7 +434,7 @@ export default function UserProfileScreen() {
                 <View style={styles.postModalOverlay}>
                     <View style={styles.postModalBox}>
                         <View style={styles.postModalHeader}>
-                            <Text style={styles.postModalHabit}>🔥 {selectedPost?.habitName}</Text>
+                            <Text style={styles.postModalHabit}><Ionicons name="flame" size={13} color="#E23B2E" /> {selectedPost?.habitName}</Text>
                             <TouchableOpacity onPress={() => setSelectedPost(null)}>
                                 <Text style={styles.postModalClose}>✕</Text>
                             </TouchableOpacity>
@@ -453,7 +454,7 @@ export default function UserProfileScreen() {
                                 )}
                                 <View style={styles.postModalStats}>
                                     <Text style={styles.postModalStat}>❤️ {(selectedPost?.likes || []).length}</Text>
-                                    <Text style={styles.postModalStat}>💬 {selectedPost?.commentCount || 0}</Text>
+                                    <Text style={styles.postModalStat}><Ionicons name="chatbubble-outline" size={14} color="#666" /> {selectedPost?.commentCount || 0}</Text>
                                 </View>
                             </View>
                         </ScrollView>

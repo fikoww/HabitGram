@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
@@ -215,7 +216,7 @@ export default function CommunityScreen() {
                                             <Image source={{ uri: p.imageUrl }} style={styles.postImage} />
                                         ) : (
                                             <View style={styles.postImagePlaceholder}>
-                                                <Text style={{ fontSize: 40 }}>📷</Text>
+                                                <Ionicons name="image-outline" size={40} color="#9A968E" />
                                             </View>
                                         )}
 
@@ -225,7 +226,7 @@ export default function CommunityScreen() {
                                                     <Text style={styles.likeIcon}>{liked ? '❤️' : '🤍'}</Text>
                                                 </TouchableOpacity>
                                                 <Text style={styles.likeCount}>{(p.likes || []).length}</Text>
-                                                <Text style={styles.commentCount}>💬 {p.commentCount || 0}</Text>
+                                                <Text style={styles.commentCount}><Ionicons name="chatbubble-outline" size={13} color="#9A968E" /> {p.commentCount || 0}</Text>
                                             </View>
                                             {p.caption ? (
                                                 <Text style={styles.caption}>
@@ -249,7 +250,7 @@ export default function CommunityScreen() {
 
                 {tab === 'chat' && membersLoaded && !isMember && (
                     <View style={styles.lockedBox}>
-                        <Text style={styles.lockedEmoji}>🔒</Text>
+                        <Ionicons name="lock-closed" size={38} color="#C1440E" style={styles.lockedEmoji} />
                         <Text style={styles.lockedTitle}>Members only</Text>
                         <Text style={styles.lockedText}>
                             Add <Text style={{ fontWeight: 'bold' }}>{name}</Text> to your habits to see and join this conversation.

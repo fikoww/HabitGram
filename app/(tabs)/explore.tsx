@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
@@ -126,7 +127,7 @@ export default function ExploreScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Explore</Text>
         <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Ionicons name="search" size={16} color="#9A968E" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search by username..."
@@ -174,7 +175,7 @@ export default function ExploreScreen() {
                   <View style={styles.streakWrap}>
                     {u.streaks.map((s) => (
                       <View key={s.name} style={styles.streakChip}>
-                        <Text style={styles.fire}>🔥</Text>
+                        <Ionicons name="flame" size={12} color="#E23B2E" style={{ marginRight: 4 }} />
                         <Text style={styles.streakLabel}>
                           {s.name} · {s.weeks}w
                         </Text>

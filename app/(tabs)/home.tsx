@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
@@ -363,7 +364,7 @@ export default function HomeScreen() {
         {/* Habit tag */}
         <View style={styles.habitChipRow}>
           <View style={styles.habitChip}>
-            <Text style={styles.habitChipText}>🔥 {item.habitName} · {item.habitStreak ?? 0}w</Text>
+            <Text style={styles.habitChipText}><Ionicons name="flame" size={13} color="#E23B2E" /> {item.habitName} · {item.habitStreak ?? 0}w</Text>
           </View>
         </View>
 
@@ -372,7 +373,7 @@ export default function HomeScreen() {
           <Image source={{ uri: item.imageUrl }} style={styles.postImage} resizeMode="cover" />
         ) : (
           <View style={styles.postImagePlaceholder}>
-            <Text style={styles.postImagePlaceholderText}>📷</Text>
+            <Ionicons name="image-outline" size={48} color="#9A968E" style={styles.postImagePlaceholderText} />
           </View>
         )}
 
@@ -390,7 +391,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
           <TouchableOpacity style={styles.actionBtn} onPress={() => openComments(item)}>
-            <Text style={styles.actionIcon}>💬</Text>
+            <Ionicons name="chatbubble-outline" size={20} color="#666" style={styles.actionIcon} />
             <Text style={styles.actionCount}>{item.commentCount || 0}</Text>
           </TouchableOpacity>
         </View>
@@ -569,6 +570,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: PAPER },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: PAPER, borderBottomWidth: 0.5, borderBottomColor: LINE },
   headerTitle: { fontSize: 24, fontFamily: SERIF, color: INK, letterSpacing: -0.3 },
+  headerLogo: { width: 130, height: 34 },
   createBtn: { backgroundColor: ACCENT, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   createBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },

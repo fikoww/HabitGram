@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth } from '../firebaseConfig';
 
 // Serif display font (OS built-in serif — no font install needed)
@@ -49,7 +49,8 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>HabitGram</Text>
+      <Image source={require('../assets/images/logo.jpeg')} style={styles.logoImg} resizeMode="contain" />
+      <Text style={styles.headerTitle}>HabitGram</Text>
       <Text style={styles.subtitle}>Sign in to continue</Text>
 
       <View style={styles.card}>
@@ -98,8 +99,9 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: PAPER, padding: 24 },
-  title: { fontSize: 40, fontFamily: SERIF, color: ACCENT, marginBottom: 4, letterSpacing: -0.5 },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFE9DE', padding: 24 },
+  headerTitle: { fontSize: 40, fontFamily: SERIF, color: ACCENT, marginBottom: 4, letterSpacing: -0.5 },
+  logoImg: { width: 360, height: 180, alignSelf: 'center', marginBottom: 8 },
   subtitle: { fontSize: 14, color: MUTED, marginBottom: 28 },
   card: { width: '100%', maxWidth: 400, backgroundColor: SURFACE, borderRadius: 18, padding: 24, borderWidth: 0.5, borderColor: LINE },
   label: { fontSize: 12, fontWeight: '600', color: MUTED, marginBottom: 7, marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.5 },

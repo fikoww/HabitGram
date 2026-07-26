@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth } from '../firebaseConfig';
 
 // Serif display font (OS built-in serif — no font install needed)
@@ -61,7 +61,8 @@ export default function RegisterScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>HabitGram</Text>
+      <Image source={require('../assets/images/logo.jpeg')} style={styles.logoImg} resizeMode="contain" />
+      <Text style={styles.headerTitle}>HabitGram</Text>
       <Text style={styles.subtitle}>Create your account</Text>
       <View style={styles.card}>
         <TextInput
@@ -117,8 +118,10 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: PAPER, padding: 24 },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFE9DE', padding: 24 },
   title: { fontSize: 40, fontFamily: SERIF, color: ACCENT, marginBottom: 4, letterSpacing: -0.5 },
+  headerTitle: { fontSize: 40, fontFamily: SERIF, color: ACCENT, marginBottom: 4, letterSpacing: -0.5 },
+  logoImg: { width: 360, height: 180, alignSelf: 'center', marginBottom: 8 },
   subtitle: { fontSize: 14, color: MUTED, marginBottom: 28 },
   card: { width: '100%', maxWidth: 400, backgroundColor: SURFACE, borderRadius: 18, padding: 24, borderWidth: 0.5, borderColor: LINE },
   input: { borderWidth: 0.5, borderColor: LINE, borderRadius: 10, padding: 14, marginBottom: 4, fontSize: 15, color: INK, backgroundColor: PAPER, ...(Platform.OS === 'web' && { outlineStyle: 'none' as any }) },

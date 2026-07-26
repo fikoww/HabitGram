@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { onAuthStateChanged, sendPasswordResetEmail, signOut } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
@@ -321,7 +322,7 @@ export default function ProfileScreen() {
                         <View style={styles.streakWrap}>
                             {topStreaks.map((sk) => (
                                 <View key={sk.name} style={styles.streakChip}>
-                                    <Text style={styles.fire}>🔥</Text>
+                                    <Ionicons name="flame" size={12} color="#E23B2E" style={{ marginRight: 4 }} />
                                     <Text style={styles.streakLabel}>
                                         {sk.name} · {sk.weeks}w
                                     </Text>
@@ -455,7 +456,7 @@ export default function ProfileScreen() {
                                     style={styles.habitTitleRow}
                                     onPress={() => router.push(`/habit-detail?id=${habit.id}`)}
                                 >
-                                    {habit.pinned && <Text style={styles.pinIcon}>📌 </Text>}
+                                    {habit.pinned && <Ionicons name="pin" size={13} color="#C1440E" style={{ marginRight: 4 }} />}
                                     <Text style={styles.habitName}>{habit.name}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -470,7 +471,7 @@ export default function ProfileScreen() {
                             {habitMenuId === habit.id && (
                                 <View style={styles.habitPopout}>
                                     <TouchableOpacity style={styles.habitMenuItem} onPress={() => handlePinHabit(habit)}>
-                                        <Text style={styles.habitMenuText}>{habit.pinned ? '📌 Unpin' : '📌 Pin Habit'}</Text>
+                                        <Text style={styles.habitMenuText}><Ionicons name="pin-outline" size={14} color="#333" />{'  '}{habit.pinned ? 'Unpin' : 'Pin Habit'}</Text>
                                     </TouchableOpacity>
                                     <View style={styles.menuDivider} />
                                     <TouchableOpacity style={styles.habitMenuItem} onPress={() => {
@@ -478,11 +479,11 @@ export default function ProfileScreen() {
                                         setNewCommitment(habit.commitment ?? 1);
                                         setChangeCommitmentHabit(habit);
                                     }}>
-                                        <Text style={styles.habitMenuText}>✏️ Change Commitment</Text>
+                                        <Text style={styles.habitMenuText}><Ionicons name="create-outline" size={14} color="#333" />{'  '}Change Commitment</Text>
                                     </TouchableOpacity>
                                     <View style={styles.menuDivider} />
                                     <TouchableOpacity style={styles.habitMenuItem} onPress={() => handleDeleteHabit(habit.id)}>
-                                        <Text style={[styles.habitMenuText, { color: '#ff4444' }]}>🗑️ Delete Habit</Text>
+                                        <Text style={[styles.habitMenuText, { color: '#ff4444' }]}><Ionicons name="trash-outline" size={14} color="#ff4444" />{'  '}Delete Habit</Text>
                                     </TouchableOpacity>
                                 </View>
                             )}
@@ -502,13 +503,13 @@ export default function ProfileScreen() {
                             {isNoCommitment ? (
                                 <View style={styles.habitStatsRow}>
                                     <Text style={styles.habitStat}>✨ Just do it (no goal)</Text>
-                                    <Text style={styles.habitStatRed}>🔥 {totalDone}x done total</Text>
+                                    <Text style={styles.habitStatRed}><Ionicons name="flame" size={13} color="#E23B2E" /> {totalDone}x done total</Text>
                                 </View>
                             ) : (
                                 <View style={styles.habitStatsRow}>
                                     <Text style={styles.habitStat}>🎯 {commitment}x/week</Text>
-                                    <Text style={styles.habitStatPurple}>🔥 {current} week(s) streak</Text>
-                                    <Text style={styles.habitStat}>🏆 Best: {max} week(s)</Text>
+                                    <Text style={styles.habitStatPurple}><Ionicons name="flame" size={13} color="#E23B2E" /> {current} week(s) streak</Text>
+                                    <Text style={styles.habitStat}><Ionicons name="trophy-outline" size={12} color="#8A8A8A" /> Best: {max} week(s)</Text>
                                 </View>
                             )}
                         </View>
@@ -545,7 +546,7 @@ export default function ProfileScreen() {
                 <View style={styles.postModalOverlay}>
                     <View style={styles.postModalBox}>
                         <View style={styles.postModalHeader}>
-                            <Text style={styles.postModalHabit}>🔥 {selectedPost?.habitName}</Text>
+                            <Text style={styles.postModalHabit}><Ionicons name="flame" size={13} color="#E23B2E" /> {selectedPost?.habitName}</Text>
                             <TouchableOpacity onPress={() => setSelectedPost(null)}>
                                 <Text style={styles.postModalClose}>✕</Text>
                             </TouchableOpacity>
@@ -567,7 +568,7 @@ export default function ProfileScreen() {
                                 )}
                                 <View style={styles.postModalStats}>
                                     <Text style={styles.postModalStat}>❤️ {(selectedPost?.likes || []).length}</Text>
-                                    <Text style={styles.postModalStat}>💬 {selectedPost?.commentCount || 0}</Text>
+                                    <Text style={styles.postModalStat}><Ionicons name="chatbubble-outline" size={14} color="#666" /> {selectedPost?.commentCount || 0}</Text>
                                 </View>
                             </View>
                         </ScrollView>

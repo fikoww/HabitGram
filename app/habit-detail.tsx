@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
@@ -154,12 +155,12 @@ export default function HabitDetailScreen() {
                     {isNoCommitment ? (
                         <>
                             <Text style={styles.subtitle}>✨ Just do it (no set goal)</Text>
-                            <Text style={styles.streakRed}>🔥 {totalDone}x done total</Text>
+                            <Text style={styles.streakRed}><Ionicons name="flame" size={13} color="#E23B2E" /> {totalDone}x done total</Text>
                         </>
                     ) : (
                         <>
                             <Text style={styles.subtitle}>🎯 {commitment}x per week</Text>
-                            <Text style={styles.streakPurple}>🔥 {streak} week(s) streak</Text>
+                            <Text style={styles.streakPurple}><Ionicons name="flame" size={13} color="#E23B2E" /> {streak} week(s) streak</Text>
                         </>
                     )}
                 </View>
