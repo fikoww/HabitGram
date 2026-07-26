@@ -1,8 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { db } from '../firebaseConfig';
+
+// Serif display font (OS built-in serif — no font install needed)
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' }) as string;
+// Design tokens (minimalist: warm paper, ink text, one terracotta accent)
+const ACCENT = '#C1440E';
+const INK = '#1A1A1A';
+const MUTED = '#9A968E';
+const LINE = '#EAE8E2';
+const PAPER = '#FBFAF8';
+const SURFACE = '#FFFFFF';
 
 type U = { id: string; displayName: string; username: string; photoUrl?: string };
 
@@ -18,10 +28,8 @@ export default function UserListScreen() {
         (async () => {
             try {
                 const sub = type === 'followers' ? 'followers' : 'following';
-                // Get the list of user IDs from the subcollection
                 const snap = await getDocs(collection(db, 'users', userId, sub));
                 const ids = snap.docs.map((d) => d.id);
-                // Fetch each user's profile info
                 const results = await Promise.all(ids.map(async (uid) => {
                     const uDoc = await getDoc(doc(db, 'users', uid));
                     const data: any = uDoc.exists() ? uDoc.data() : {};
@@ -52,7 +60,7 @@ export default function UserListScreen() {
             </View>
 
             {loading ? (
-                <ActivityIndicator style={{ marginTop: 32 }} color="#4CAF50" />
+                <ActivityIndicator style={{ marginTop: 32 }} color={ACCENT} />
             ) : users.length === 0 ? (
                 <View style={styles.emptyBox}>
                     <Text style={styles.emptyEmoji}>👤</Text>
@@ -82,17 +90,17 @@ export default function UserListScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 56, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-    backText: { color: '#B45309', fontSize: 16, fontWeight: '600' },
-    headerTitle: { fontSize: 17, fontWeight: 'bold' },
+    container: { flex: 1, backgroundColor: PAPER },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 56, backgroundColor: PAPER, borderBottomWidth: 0.5, borderBottomColor: LINE },
+    backText: { color: ACCENT, fontSize: 16, fontWeight: '600' },
+    headerTitle: { fontSize: 18, fontFamily: SERIF, color: INK },
     emptyBox: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32 },
-    emptyEmoji: { fontSize: 44, marginBottom: 12 },
-    emptyText: { fontSize: 15, color: '#888', textAlign: 'center' },
-    row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 12, marginHorizontal: 12, marginTop: 8, borderRadius: 12, gap: 12 },
-    avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#C17F3F', justifyContent: 'center', alignItems: 'center' },
-    avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 20 },
-    name: { fontSize: 15, fontWeight: '600', color: '#333' },
-    username: { fontSize: 13, color: '#888', marginTop: 2 },
-    chevron: { fontSize: 24, color: '#ccc' },
+    emptyEmoji: { fontSize: 44, marginBottom: 12, opacity: 0.6 },
+    emptyText: { fontSize: 15, color: MUTED, textAlign: 'center' },
+    row: { flexDirection: 'row', alignItems: 'center', backgroundColor: SURFACE, padding: 12, marginHorizontal: 12, marginTop: 8, borderRadius: 12, gap: 12, borderWidth: 0.5, borderColor: LINE },
+    avatar: { width: 48, height: 48, borderRadius: 14, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center' },
+    avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 20, fontFamily: SERIF },
+    name: { fontSize: 15, fontWeight: '600', color: INK },
+    username: { fontSize: 13, color: MUTED, marginTop: 2 },
+    chevron: { fontSize: 24, color: '#D6D3CB' },
 });
